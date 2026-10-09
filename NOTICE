@@ -1,0 +1,13 @@
+Vellum
+Copyright (c) 2026 Xiaoxingchen37 (ZephyrGT)
+
+This product includes software derived from easyread
+(https://github.com/Edwardxlai/easyread), Copyright (c) Edwardxlai,
+licensed under the MIT License.
+
+Portions of that project's Python backend and web reader are reused here with
+modifications: the package was renamed to `vellum`, the translation engine was
+switched from the Claude Code / Codex CLI to the opencode CLI plus direct
+OpenAI-compatible APIs, and a Tauri + React desktop shell was added.
+
+Third-party component licenses are listed in THIRD_PARTY_LICENSES.md.
