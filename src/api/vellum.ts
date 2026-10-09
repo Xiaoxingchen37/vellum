@@ -230,6 +230,19 @@ export function testEngine(engine: string): Promise<{ ok: boolean; message: stri
   });
 }
 
+/** Ask the provider's /models endpoint what it serves (settings "获取模型列表"). */
+export function listModels(body: {
+  base_url: string;
+  preset?: string;
+  api_key?: string;
+}): Promise<{ ok: boolean; models?: string[]; message?: string }> {
+  return api<{ ok: boolean; models?: string[]; message?: string }>("/api/models/list", {
+    method: "POST",
+    headers: { "X-Token": sessionToken },
+    body: JSON.stringify(body),
+  });
+}
+
 export async function artifactUrl(id: string, rel: string): Promise<string> {
   const base = await backendUrl();
   const clean = rel.replace(/^\/+/, "");

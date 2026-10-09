@@ -244,7 +244,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/trash":
             return self._json(200, {"items": trash.items(lib.root)})
         if path == "/api/config":
-            return self._json(200, {"config": config.public(config.load()), "presets": config.PRESETS, "groups": config.PRESET_GROUPS})
+            cfg = config.load()
+            return self._json(200, {"config": config.public(cfg), "presets": config.PRESETS,
+                                    "groups": config.PRESET_GROUPS, "engine_label": cli_models.engine_label(cfg)})
         if path == "/api/engines":
             cfg = config.load()
             found = detect.detect(cfg, fresh=parse_qs(url.query).get("fresh") == ["1"])

@@ -25,7 +25,8 @@ SERVER_INFO = HOME / ".server.json"
 DEFAULTS = {
     "library_dir": str(HOME / "library"),
     "port": 8765,
-    "engine": "opencode",        # opencode（本机 CLI 无头，主引擎）| openai（任意 OpenAI 兼容接口）| none
+    # openai（直连任意 OpenAI 兼容接口，默认，不依赖任何 CLI）| opencode（本机 CLI 无头）| none
+    "engine": "openai",
     "auto_translate": True,      # 导入后自动开始翻译
     "target": "zh",              # 译文语言，见 langs.py
     "check_updates": False,      # 关闭：Vellum 是本地项目，不查询 easyread 的 Release
@@ -38,7 +39,7 @@ DEFAULTS = {
     # standalone：每次调用起一个私有服务，而不是去抢 opencode 的后台托管服务——托管服务常被用户
     # 日常用的 opencode 占住端口，导致每次翻译先重试约 25 秒再失败。默认开，只有特殊环境才需要关。
     "opencode": {"command": "opencode", "model": "", "vision": True, "standalone": True, "extra_args": [], "timeout": 1200},
-    # api：chat（/chat/completions）| responses（/responses），见 openai_api.py
+    # api：chat（/chat/completions）| responses（/responses）| messages（Anthropic /messages），见 openai_api.py
     "openai": {"preset": "", "base_url": "", "api": "chat", "api_key": "", "model": "", "vision": False, "timeout": 600},
     # 阅读页右侧“问 AI”的模型名单和默认模型，见 chat_models.py
     "chat": copy.deepcopy(DEFAULT_CHAT),
@@ -64,7 +65,20 @@ def _saved() -> dict:
     elif raw.get("concurrency_v") != 2 and isinstance(raw.get("concurrency"), int) and raw["concurrency"] > 4:
         raw["concurrency"] = 4  # 以前的 6 是“同时 6 批”，现在是“同时 6 段”：升级时不替老用户开到 4 段以上
     raw["concurrency_v"] = 2
+    # 老版本把“问 AI”的名单写死成 opencode 一项。现在默认引擎是直连 API，这种没动过的名单
+    # 会让“问 AI”继续走 opencode；清空它，改由 chat_models 跟随当前翻译引擎。
+    chat = raw.get("chat")
+    if isinstance(chat, dict) and _legacy_chat(chat.get("models")):
+        chat.pop("models", None)
+        chat.pop("default", None)
     return raw
+
+
+def _legacy_chat(models) -> bool:
+    """是不是老版本那个写死的 opencode 默认名单（用户没自己改过）。"""
+    return (isinstance(models, list) and len(models) == 1
+            and {k: models[0].get(k) for k in ("id", "name", "engine", "model")}
+            == {"id": "opencode", "name": "opencode", "engine": "opencode", "model": ""})
 
 
 def load() -> dict:

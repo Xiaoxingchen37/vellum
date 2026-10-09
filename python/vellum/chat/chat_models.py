@@ -14,10 +14,9 @@ from ..engines import engines
 from ..engines.presets import PRESETS
 from ..app.i18n import tr
 
-# opencode 用 provider/model 形式的模型名，不指定就跟 opencode 自己的默认。
-DEFAULT_MODELS = [
-    {"id": "opencode", "name": "opencode", "engine": "opencode", "model": ""},
-]
+# 默认空名单：没有单独配“问 AI”用哪些模型时，直接跟随当前翻译引擎（见 from_engine）。
+# 这样只装了直连 API、完全没装 opencode 的机器，边读边问 AI 也能用。
+DEFAULT_MODELS: list[dict] = []
 _SEEN_PATH = None  # config.HOME / ".models-seen.json"，懒加载避免循环导入
 
 
@@ -47,11 +46,21 @@ def actual_of(alias: str) -> str:
     return (read_json(_seen_path(), {}) or {}).get(alias, "")
 
 
-DEFAULT_CHAT = {"models": DEFAULT_MODELS, "default": "opencode"}
+DEFAULT_CHAT = {"models": [], "default": ""}
+
+
+def from_engine(cfg: dict) -> dict:
+    """把当前翻译引擎当作一个对话模型。名单为空时用它，省得用户配两遍。"""
+    if cfg.get("engine") == "opencode":
+        return {"id": "translate", "name": tr("跟随翻译引擎"), "engine": "opencode", "model": ""}
+    o = cfg.get("openai") or {}
+    return {"id": "translate", "name": tr("跟随翻译引擎"), "engine": "openai", "preset": o.get("preset", ""),
+            "base_url": o.get("base_url", ""), "model": o.get("model", ""), "api": o.get("api", "")}
 
 
 def models(cfg: dict) -> list[dict]:
-    return list((cfg.get("chat") or {}).get("models") or DEFAULT_MODELS)
+    ms = list((cfg.get("chat") or {}).get("models") or [])
+    return ms or [from_engine(cfg)]
 
 
 def find(cfg: dict, mid: str | None) -> dict:
@@ -143,5 +152,5 @@ def sanitize(items: list[dict]) -> list[dict]:
         seen.add(mid)
         out.append({"id": mid, "name": str(m.get("name") or m.get("model") or tr("模型"))[:40], "engine": e,
                     "model": str(m.get("model") or "")[:120], "preset": str(m.get("preset") or ""), "base_url": str(m.get("base_url") or "")[:300],
-                    "api": m.get("api") if m.get("api") in ("chat", "responses") else ""})
+                    "api": m.get("api") if m.get("api") in ("chat", "responses", "messages") else ""})
     return out or copy.deepcopy(DEFAULT_MODELS)

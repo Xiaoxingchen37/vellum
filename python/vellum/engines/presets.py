@@ -41,6 +41,7 @@ def _build(tr) -> list[dict]:
          "models": [_m("gpt-6-luna", "GPT-6 Luna", tr("最便宜"), True), _m("gpt-6.1-sol", "GPT-6.1 Sol", tr("均衡"), True), _m("gpt-6-astra", "GPT-6 Astra", tr("最强"), True)],
          "key_url": "https://platform.openai.com/api-keys", "note": tr("用 Responses 接口。")},
         {"id": "anthropic", "region": "intl", "name": "Anthropic", "base_url": "https://api.anthropic.com/v1", "model": "claude-sonnet-5-5", "key": True, "free": False,
+         "api": "messages",
          "models": [_m("claude-sonnet-5-5", "Claude Sonnet 5.5", tr("均衡"), True), _m("claude-opus-5-5", "Claude Opus 5.5", tr("更强"), True),
                     _m("claude-haiku-4-5", "Claude Haiku 4.5", tr("最快最省"), True), _m("claude-fable-5-1", "Claude Fable 5.1", tr("最强、最贵"), True)],
          "key_url": "https://platform.claude.com/settings/keys", "note": tr("Claude 的 API（按量付费，和 Claude 订阅是两回事；有订阅就用上面的 Claude Code）。")},

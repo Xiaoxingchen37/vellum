@@ -213,14 +213,41 @@ export type ConfigResponse = {
     engine: string;
     target: string;
     opencode: { command: string; model: string; vision: boolean; timeout: number };
-    openai: { preset: string; base_url: string; model: string; has_key?: boolean };
+    openai: {
+      preset: string;
+      base_url: string;
+      api?: string;
+      model: string;
+      vision?: boolean;
+      has_key?: boolean;
+      api_key?: string;
+      saved_keys?: string[];
+    };
     page_cap: number;
     batch_pages: number;
     concurrency: number;
     auto_translate: boolean;
   };
-  presets: unknown[];
-  groups: unknown[];
+  presets: Preset[];
+  groups: [string, string][];
+  engine_label?: string;
+};
+
+/** One provider preset from the backend (`presets.py`). */
+export type PresetModel = { id: string; name: string; tag?: string; vision?: boolean };
+
+export type Preset = {
+  id: string;
+  region: "cn" | "intl" | "local" | string;
+  name: string;
+  base_url: string;
+  model: string;
+  key: boolean;
+  free?: boolean;
+  api?: string;
+  models?: PresetModel[];
+  key_url?: string;
+  note?: string;
 };
 
 export type ChatModelEntry = {

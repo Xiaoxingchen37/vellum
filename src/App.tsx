@@ -35,8 +35,8 @@ function App() {
   const refreshEngine = () => {
     getConfig()
       .then((c) => {
-        const model = c.config.opencode?.model || "";
-        setEngineLabel(model ? `${c.config.engine} · ${model}` : c.config.engine);
+        // The backend already formats this ("opencode · …" / "DeepSeek · …").
+        setEngineLabel(c.engine_label || c.config.engine);
       })
       .catch(() => setEngineLabel(""));
   };

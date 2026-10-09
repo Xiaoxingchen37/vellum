@@ -1,7 +1,8 @@
-"""OpenAI 兼容接口：两种格式都支持。
+"""模型接口层：三种主流协议都支持，全部走 httpx/urllib 直连，不依赖任何 CLI。
 
 - chat：POST {base}/chat/completions，几乎所有服务商都支持（DeepSeek、智谱、Ollama……）。
 - responses：POST {base}/responses，OpenAI 新接口；DeepSeek 等也已支持。中转站只开了这个时选它。
+- messages：POST {base}/messages，Anthropic Messages API（认证用 x-api-key，max_tokens 必填）。
 
 另外 models() 读 {base}/models，给设置页“获取模型列表”用。
 """
@@ -27,7 +28,8 @@ from .engines import Cancelled, EngineError
 from ..app.i18n import tr
 
 def api_kinds() -> list[tuple[str, str]]:
-    return [("chat", tr("Chat Completions（通用）")), ("responses", tr("Responses（OpenAI 新接口）"))]
+    return [("chat", tr("Chat Completions（通用）")), ("responses", tr("Responses（OpenAI 新接口）")),
+            ("messages", tr("Messages（Anthropic）"))]
 
 
 def _hint(code: int) -> str:
@@ -39,7 +41,7 @@ _SESSION = f"easyread-{uuid.uuid4()}"  # 每次启动一个，整个进程内不
 
 
 def kind(o: dict) -> str:
-    return "responses" if o.get("api") == "responses" else "chat"
+    return o.get("api") if o.get("api") in ("responses", "messages") else "chat"
 
 
 def _base(o: dict) -> str:
@@ -53,6 +55,14 @@ def _headers(o: dict, stream: bool = False) -> dict:
     # 要带 User-Agent：Python 默认的 "Python-urllib/x" 会被 Cloudflare 后面的接口（比如 OpenCode）直接拦掉，报 403 error code: 1010
     # x-opencode-session：OpenCode Go 要求带一个稳定的会话 ID，不带报 400 MissingSessionID；别的服务商会忽略这个头
     h = {"Content-Type": "application/json", "User-Agent": f"EasyRead/{__version__}", "x-opencode-session": _SESSION}
+    if kind(o) == "messages":
+        # Anthropic 用 x-api-key，不认 Bearer；额外要求 anthropic-version。
+        h["anthropic-version"] = "2023-06-01"
+        if stream:
+            h["Accept"] = "text/event-stream"
+        if o.get("api_key"):
+            h["x-api-key"] = o["api_key"]
+        return h
     if stream:
         h["Accept"] = "text/event-stream"
     if o.get("api_key"):
@@ -62,31 +72,42 @@ def _headers(o: dict, stream: bool = False) -> dict:
 
 def _body(o: dict, prompt: str, images: list[Path], stream: bool, temperature: float | None) -> dict:
     urls = ["data:image/jpeg;base64," + base64.b64encode(p.read_bytes()).decode() for p in images] if o.get("vision") else []
-    if kind(o) == "responses":
+    k = kind(o)
+    if k == "responses":
         content = [{"type": "input_text", "text": prompt}] + [{"type": "input_image", "image_url": u} for u in urls]
         body = {"model": o["model"], "input": [{"role": "user", "content": content}], "store": False}
+    elif k == "messages":
+        # Anthropic Messages：图片是 base64 source，max_tokens 必填（它没有默认值）。
+        blocks: list[dict] = [{"type": "text", "text": prompt}]
+        for u in urls:
+            blocks.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                       "data": u.split(",", 1)[1]}})
+        body = {"model": o["model"], "max_tokens": int(o.get("max_tokens") or 16000),
+                "messages": [{"role": "user", "content": blocks if urls else prompt}]}
     else:
         content = [{"type": "text", "text": prompt}] + [{"type": "image_url", "image_url": {"url": u}} for u in urls] if urls else prompt
         body = {"model": o["model"], "messages": [{"role": "user", "content": content}]}
-    if o.get("reasoning_effort"):
-        if kind(o) == "responses":
+    # reasoning_effort / service_tier 是 OpenAI 系参数，Anthropic 会直接报 400。
+    if o.get("reasoning_effort") and k != "messages":
+        if k == "responses":
             body["reasoning"] = {"effort": o["reasoning_effort"]}
         else:
             body["reasoning_effort"] = o["reasoning_effort"]
-    if o.get("service_tier"):
+    if o.get("service_tier") and k != "messages":
         body["service_tier"] = o["service_tier"]
     if temperature is not None and not o.get("reasoning_effort"):
         body["temperature"] = temperature
     if stream:
         body["stream"] = True
-        if kind(o) == "chat":
+        if k == "chat":
             body["stream_options"] = {"include_usage": True}  # 最后一块带上 token 用量；不认这个参数的接口会去掉再发
     return body
 
 
 def _open(o: dict, body: dict, stream: bool):
     """发请求。有的模型（推理模型、Kimi K2 系列）不让改 temperature、有的接口不认 stream_options，报 400 时去掉再发。"""
-    path = "/responses" if kind(o) == "responses" else "/chat/completions"
+    k = kind(o)
+    path = "/responses" if k == "responses" else "/messages" if k == "messages" else "/chat/completions"
     for _ in range(3):
         req = urllib.request.Request(_base(o) + path, data=json.dumps(body).encode(), headers=_headers(o, stream))
         try:
@@ -133,7 +154,8 @@ def complete(o: dict, prompt: str, images: list[Path], cancel=None, meter=None) 
             raise EngineError(tr("连不上接口：{err}", err=e))
     if meter is not None and isinstance(res, dict):
         meter.add(**usage.from_openai(res))
-    return _responses_text(res) if kind(o) == "responses" else _chat_text(res)
+    k = kind(o)
+    return _responses_text(res) if k == "responses" else _messages_text(res) if k == "messages" else _chat_text(res)
 
 
 def _fetch(o: dict, body: dict, cancel) -> dict:
@@ -178,6 +200,20 @@ def _responses_text(res) -> str:
         raise EngineError(tr("接口返回格式不对：{res}", res=str(res)[:300]))
     return "".join(c.get("text") or "" for item in res["output"] if item.get("type") == "message"
                    for c in item.get("content") or [] if c.get("type") == "output_text")
+
+
+def _messages_text(res) -> str:
+    """Anthropic Messages 的返回：content 是类型化的块列表。"""
+    if not isinstance(res, dict):
+        raise EngineError(tr("接口返回格式不对：{res}", res=str(res)[:300]))
+    if res.get("stop_reason") == "max_tokens":
+        raise _truncated()
+    if res.get("type") == "error":
+        raise EngineError(tr("接口返回出错：{err}", err=(res.get("error") or {}).get("message") or res.get("error")))
+    blocks = res.get("content")
+    if not isinstance(blocks, list):
+        raise EngineError(tr("接口返回格式不对：{res}", res=str(res)[:300]))
+    return "".join(b.get("text") or "" for b in blocks if isinstance(b, dict) and b.get("type") == "text")
 
 
 def _truncated() -> EngineError:
@@ -237,7 +273,9 @@ def stream(o: dict, text: str, cancel, meter=None) -> Iterator[str]:
     with r:
         if cancel.is_set():
             raise Cancelled()
-        pieces = _responses_pieces(r, cancel, meter) if kind(o) == "responses" else _chat_pieces(r, cancel, meter)
+        k = kind(o)
+        pieces = _responses_pieces(r, cancel, meter) if k == "responses" else \
+            _messages_pieces(r, cancel, meter) if k == "messages" else _chat_pieces(r, cancel, meter)
         yield from _strip_think(pieces)
 
 
@@ -328,6 +366,30 @@ def _responses_pieces(r, cancel, meter=None) -> Iterator[str]:
             err = (ev.get("response") or {}).get("error") or ev.get("error") or ev.get("message")
             raise EngineError(tr("接口返回出错：{err}", err=err))
     raise EngineError(tr("接口连接提前结束，回答未完成，请重试。"))
+
+
+def _messages_pieces(r, cancel, meter=None) -> Iterator[str]:
+    """Anthropic Messages 的流：event: 行 + data: 行，正文在 content_block_delta 的 text_delta 里。"""
+    done = False
+    for ev in _events(r, cancel):
+        if ev is None:
+            return
+        t = ev.get("type", "")
+        if t == "content_block_delta":
+            delta = ev.get("delta") or {}
+            if delta.get("type") in ("text_delta", "text"):
+                yield delta.get("text") or ""
+        elif t == "message_delta":
+            if (ev.get("delta") or {}).get("stop_reason") == "max_tokens":
+                raise _truncated()
+            if meter is not None:
+                meter.add(**usage.from_anthropic({**ev, "message": ev.get("message")}))
+        elif t == "message_stop":
+            done = True
+        elif t == "error":
+            raise EngineError(tr("接口返回出错：{err}", err=(ev.get("error") or {}).get("message") or ev.get("error")))
+    if not done:
+        raise EngineError(tr("接口连接提前结束，回答未完成，请重试。"))
 
 
 def _strip_think(pieces: Iterator[str]) -> Iterator[str]:

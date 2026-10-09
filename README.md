@@ -26,7 +26,7 @@ Python 侧车 (FastAPI)        MinerU 客户端 + 三协议 LLM 层 + 翻译 + �
 
 ## 翻译协议支持
 
-翻译层用 `httpx` 直连三家主流协议，不依赖各家 SDK：
+翻译层直连三家主流协议，不依赖各家 SDK，也**不需要装任何 CLI**：
 
 | 协议 | 路径 | 认证 | 说明 |
 |---|---|---|---|
@@ -36,6 +36,20 @@ Python 侧车 (FastAPI)        MinerU 客户端 + 三协议 LLM 层 + 翻译 + �
 
 适配器会自动处理推理模型泄漏的 `reasoning_content`、多模态数组 content、
 Responses 的异构 `output` 列表与 Anthropic 的类型化内容块。
+
+设置页内置常见服务商预设（国内直连 / 海外 / 本机 Ollama、LM Studio），Key 按服务商分别保存，
+可一键「获取模型列表」。
+
+## 引擎：直连 API 或 opencode CLI
+
+翻译引擎二选一，默认是**直连 API**：
+
+- **API（默认）**：填服务商地址 + Key 就能用。只要接口兼容上面三种协议之一即可，
+  包括中转站和本机 Ollama。
+- **opencode CLI（可选）**：复用本机已登录的 opencode，不必再填 Key。
+  调用时每次起一个私有服务（`--standalone`），不去抢占它自己的后台服务。
+
+两条路都支持"边读边问 AI"；没有单独配置问 AI 的模型名单时，会自动跟随翻译引擎。
 
 ## 环境
 

@@ -100,3 +100,14 @@ def from_openai(res: dict) -> dict:
     details = u.get("input_tokens_details") or {}
     return {"input": int(u.get("input_tokens") or 0), "cached": int(details.get("cached_tokens") or 0),
             "output": int(u.get("output_tokens") or 0)}
+
+
+def from_anthropic(res: dict) -> dict:
+    """Anthropic Messages 的 usage：input_tokens / output_tokens，缓存读写在 cache_* 字段。
+    流式时用量分散在 message_start（输入）和 message_delta（输出）两个事件里。"""
+    u = (res or {}).get("usage") or {}
+    if not u and isinstance(res.get("message"), dict):  # message_start 事件
+        u = res["message"].get("usage") or {}
+    cached = int(u.get("cache_read_input_tokens") or 0)
+    return {"input": int(u.get("input_tokens") or 0), "cached": cached,
+            "output": int(u.get("output_tokens") or 0)}
