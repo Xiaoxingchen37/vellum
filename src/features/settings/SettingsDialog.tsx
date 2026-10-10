@@ -47,6 +47,8 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
   const [groups, setGroups] = useState<[string, string][]>([]);
   const [found, setFound] = useState<EnginesResponse["found"] | null>(null);
   const [pageCap, setPageCap] = useState(60);
+  const [batchPages, setBatchPages] = useState(2);
+  const [concurrency, setConcurrency] = useState(0);
   const [busy, setBusy] = useState(false);
   const { push } = useToast();
 
@@ -74,6 +76,8 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
         setPresets(c.presets ?? []);
         setGroups((c.groups as [string, string][]) ?? []);
         setPageCap(cfg.page_cap ?? 60);
+        setBatchPages(cfg.batch_pages ?? 2);
+        setConcurrency(cfg.concurrency ?? 0);
         setPreset(cfg.openai?.preset ?? "");
         setBaseUrl(cfg.openai?.base_url ?? "");
         setApi(cfg.openai?.api ?? "chat");
@@ -161,6 +165,8 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
       await saveConfig({
         engine: "openai",
         page_cap: pageCap,
+        batch_pages: batchPages,
+        concurrency,
         openai: {
           preset,
           base_url: baseUrl.trim(),
@@ -395,6 +401,37 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
             />
             <p className="hint">超过这个页数会先确认再翻译；填 0 表示不限制。</p>
           </label>
+
+          <div className="grid2">
+            <label className="field">
+              <span>每次交给模型的页数</span>
+              <select
+                className="input"
+                value={batchPages}
+                onChange={(e) => setBatchPages(Number(e.target.value))}
+              >
+                <option value={1}>1 页（最稳，模型输出不易截断）</option>
+                <option value={2}>2 页（默认）</option>
+                <option value={3}>3 页（快一些，长论文可能被截断）</option>
+              </select>
+              <p className="hint">页数越多越快，但单次输出变长，超出模型上限会被截断。</p>
+            </label>
+            <label className="field">
+              <span>同时翻译几段</span>
+              <select
+                className="input"
+                value={concurrency}
+                onChange={(e) => setConcurrency(Number(e.target.value))}
+              >
+                <option value={0}>自动（推荐）</option>
+                <option value={1}>1 段（最省流量）</option>
+                <option value={2}>2 段</option>
+                <option value={4}>4 段（最快，容易被限流）</option>
+                <option value={8}>8 段（最快，容易被限流）</option>
+              </select>
+              <p className="hint">同时开几段一起译。开太多可能触发服务商限流。</p>
+            </label>
+          </div>
 
           <hr className="settings-rule" />
 

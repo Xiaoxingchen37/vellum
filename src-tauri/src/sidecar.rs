@@ -12,6 +12,12 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+/// Windows: keep the spawned sidecar from opening its own console window. Both
+/// the frozen exe and a `python.exe` are console programs, so without this flag
+/// a black terminal pops up next to the app window.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
 /// Environment variable that overrides interpreter discovery.
 pub const PYTHON_ENV_VAR: &str = "VELLUM_PYTHON";
 /// Conda environments to try, in order, when discovering a Python interpreter.
@@ -87,6 +93,11 @@ impl Sidecar {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
 
         let mut child = command
             .spawn()
@@ -157,10 +168,12 @@ impl Sidecar {
         if let Some(mut child) = self.child.take() {
             #[cfg(windows)]
             {
+                use std::os::windows::process::CommandExt;
                 let _ = Command::new("taskkill")
                     .args(["/PID", &child.id().to_string(), "/T", "/F"])
                     .stdout(Stdio::null())
                     .stderr(Stdio::null())
+                    .creation_flags(CREATE_NO_WINDOW)
                     .status();
             }
             let _ = child.kill();
