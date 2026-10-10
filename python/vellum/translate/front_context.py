@@ -11,8 +11,8 @@ from pathlib import Path
 
 from .segments import _HEADING, _lines
 
-HEAD_CHARS = 1800   # 论文开头：标题、作者、摘要
-PREV_CHARS = 5000   # 上一页全文太长时只留后面这些（离本批最近的部分）
+HEAD_CHARS = 700    # 论文开头：标题、作者、摘要的开头（只要能认出领域和缩写）
+PREV_CHARS = 2000   # 上一页全文太长时只留后面这些（离本批最近的部分）
 OUTLINE_MAX = 60    # 章节目录最多几条
 _REFS = re.compile(r"^\s*(\d+\.?\s*)?(references|bibliography)\s*$", re.I)  # i18n-ok
 _ENTRY = re.compile(r"[A-Z]\.\s*(,|and\b)|\bet al\.|\(\d{4}\)|\d{4}\.")  # 参考文献条目、正文句子里像作者、年份的写法

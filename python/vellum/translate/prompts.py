@@ -13,7 +13,7 @@ RULES = """翻译要求：
 - 但要留心原文自己的问题：数字前后对不上（表和正文、两张表之间）、公式和文字说的不一致、符号用错、明显的笔误。发现了就写进 checks，正文照录不改；没有就不写，不要为了写而写，也不要写翻译说明。
 - 术语全文统一；首次出现的核心术语写“中文（English）”。已有术语表必须遵守。统计学里 standard error 译“标准误差”。
 - 行内数学一律写成 $TeX$（KaTeX 能渲染的 LaTeX），变量、下标、上标都要用 TeX，不要用 Unicode 拼。行间公式单独成 math 块，照原页重排，原编号放 tag。
-- 表格重排成 table 块，表头译成中文，数字原样。图用 figure 块：尽量给出图在原页中的归一化裁剪框 `box:[x0,y0,x1,y1]`（左上和右下坐标，范围 0 到 1，框住图本身、不含题注），并翻译图内可读的标题、坐标轴、图例、流程框文字和标签到 `image_zh`（使用目标语言），原文写入 `image_en`；没有原页图时不猜裁剪框，看不清或没有文字就留空，不猜。`src` 留空，由程序按 `box` 从原 PDF 裁图。
+- 表格重排成 table 块，表头译成中文，数字原样。图用 figure 块：给出归一化裁剪框 `box:[x0,y0,x1,y1]`（0 到 1，框住图本身、不含题注），把图内可读的标题、坐标轴、图例、标签译成中文写进 `image_zh`，原文写 `image_en`；没有原页图时不猜框，看不清或没有文字就留空。`src` 留空，由程序按 `box` 裁图。
 - 参考文献列表不翻译：输出一个 references 块，条目放进 references 数组（id 是编号，text 是原文）。
 - 代码和伪代码用 para 块，en/zh 中用 Markdown 代码围栏包住代码，保留缩进、换行、标识符和字符串；只翻译题注及自然语言注释。题注放在围栏外，不要输出 code 或 listing 类型，不要在代码里插句子分界 ‖。
 - 看不清的地方写“此处识别不清，请核对原文第 N 页”，不要猜。
@@ -21,19 +21,19 @@ RULES = """翻译要求：
 
 SCHEMA = """输出格式：只输出一个 JSON 对象，不要任何别的文字。
 {
-  "meta": {"title_zh": "", "short_zh": "不超过 12 字的短标题", "title_en": "", "authors": "作者, 用逗号分隔", "affiliation": "", "date": "", "venue": ""},   // 只有包含第 1 页时才写
+  "meta": {"title_zh": "", "short_zh": "不超过 12 字的短标题", "title_en": "", "authors": "", "affiliation": "", "date": "", "venue": ""},   // 只有包含第 1 页时才写
   "glossary": [{"en": "standard error", "zh": "标准误差"}],   // 本批新出现的核心术语
   "references": [{"id": "1", "text": "原文条目"}],             // 本批出现参考文献列表时才写
-  "checks": [{"anchor": "块 id", "quote": "译文里相关的几个字（可空）", "title": "一句话：哪里不对", "body": "具体说明和依据，比如算一遍给出对得上的数"}],   // 原文有问题时才写
+  "checks": [{"anchor": "块 id", "quote": "译文里相关的几个字（可空）", "title": "一句话：哪里不对", "body": "具体说明和依据"}],   // 原文有问题时才写
   "blocks": [ ... ]
 }
 块（每块都要 id、type、page；page 是这块在原 PDF 中开始的页码）：
-- {"id":"p3-2","type":"para","page":3,"en":"英文原文第一句. ‖ Second sentence（行内数学也写成 $TeX$）.","zh":"中文译文第一句。‖第二句。"}   摘要段落加 "role":"abstract"；紧接在公式后的半句（如 where …）加 "cont": true
+- {"id":"p3-2","type":"para","page":3,"en":"第一句. ‖ Second sentence.","zh":"第一句。‖第二句。"}   摘要段落加 "role":"abstract"；紧接在公式后的半句（如 where …）加 "cont": true
 - {"id":"s2-1","type":"heading","page":2,"level":1或2,"num":"2.1","en":"Independent questions","zh":"相互独立的题目"}   附录标题加 "appendix": true，摘要标题 num 留空
 - {"id":"p2-5","type":"list","page":2,"ordered":true,"items":[{"en":"…","zh":"…"}]}
 - {"id":"eq1","type":"math","page":3,"tex":"…","tag":"1"}   没有编号不写 tag；多行用 \\begin{aligned}…\\end{aligned}
-- {"id":"tab2","type":"table","page":3,"num":"2","head":[["","题目数","…"]],"rows":[["MATH","5,000","65.5%\\n(0.7%)"]],"align":"lrr","caption_en":"Table 2: …","caption_zh":"表 2：…"}
-- {"id":"fig1","type":"figure","page":4,"num":"1","src":"","box":[0.1,0.2,0.9,0.8],"image_en":"图内可读文字原文（没有就留空）","image_zh":"图内文字的译文（没有就留空）","caption_en":"Figure 1: …","caption_zh":"图 1：…"}
+- {"id":"tab2","type":"table","page":3,"num":"2","head":[["","…"]],"rows":[["MATH","5,000"]],"align":"lrr","caption_en":"Table 2: …","caption_zh":"表 2：…"}
+- {"id":"fig1","type":"figure","page":4,"num":"1","src":"","box":[0.1,0.2,0.9,0.8],"image_en":"图内可读文字（没有就留空）","image_zh":"图内文字的译文（没有就留空）","caption_en":"Figure 1: …","caption_zh":"图 1：…"}
 - {"id":"refs","type":"references","page":10,"zh":"参考文献","en":"References"}
 句子对齐：para 和 list 的每一项，en 和 zh 都在两边对应的句子交界处各插一个 ‖，两边 ‖ 个数必须相同。只在两边都断句的地方插：中文把两句英文合成一句时，这两句英文之间不插；一句英文拆成两句中文时，这两句中文之间也不插。只有一句就不插。‖ 不要放进 $公式$ 里，标题、表格、图、题注都不插。
 id 规则：段落 p{页}-{序号}，标题 s{编号，点换成横线}，公式 eq{编号} 或 eq-p{页}-{序号}，表 tab{编号}，图 fig{编号}。
@@ -104,6 +104,59 @@ _NOTE = re.compile(r"^\s*(\$\^|[¹²³⁴⁵⁶⁷⁸⁹*†‡]|\d{1,2}\s*https
 _NOTE_PLAIN = re.compile(r"^\s*\d{1,2}\s?[A-Z][a-z]")
 
 
+def _page_text_raw(ws: Workspace, n: int) -> str:
+    p = ws.root / "extract" / f"page-{n:03d}.txt"
+    return p.read_text(encoding="utf-8") if p.exists() else ""
+
+
+def _boiler_lines(ws: Workspace, total_pages: int) -> set[str]:
+    """页眉页脚、版权声明这类每页都出现的行。
+
+    规则里已经让模型忽略它们，发了只是白花钱（实测一篇 13 页的论文有 468 token 是这类重复行）。
+    一处出现就缓存：整篇翻译只扫一次。
+    """
+    cache = getattr(ws, "_vellum_boiler", None)
+    if cache is not None:
+        return cache
+    counts: dict[str, int] = {}
+    pages = 0
+    for n in range(1, (total_pages or 0) + 1):
+        text = _page_text_raw(ws, n)
+        if not text:
+            continue
+        pages += 1
+        for s in {x.strip() for x in text.splitlines() if len(x.strip()) > 15}:
+            counts[s] = counts.get(s, 0) + 1
+    # 在四成以上的页里都出现，才算重复噪声（偶有的相同短句不算）
+    need = max(2, int(pages * 0.4))
+    out = {s for s, c in counts.items() if c >= need}
+    try:
+        ws._vellum_boiler = out  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 —— Workspace 可能是别的类，缓存不了就每次重算
+        pass
+    return out
+
+
+def _used_terms(paper: dict, ws: Workspace, pages: list[int], limit: int = 40) -> list[dict]:
+    """只留本批这些页上真的出现的术语。
+
+    术语表是全文累积的，长论文能到几百条：每批都整表发一遍，很快就是提示词里最大的一块
+    （实测 58 条 ≈ 769 token，其中这批只会用到十几条，过滤掉能省 500–700 token/批）。
+    本批没出现的术语照术语表也译不出来，发了只是让模型多读一遍。
+    """
+    gl = paper.get("glossary", [])
+    if not gl:
+        return []
+    text = " ".join(_page_text_raw(ws, n) for n in pages).lower()
+    if not text:
+        return gl[-limit:]
+    from .terms import mentions_count  # 局部导入：terms 也 import prompts（经 consistency）
+
+    hit = [g for g in gl if mentions_count(text, str(g.get("en") or ""))]
+    # 本批一页都没出现时退化成最近的几条，别把术语表整段丢掉（开头定义过的缩写后面还会用）
+    return hit[-limit:] if hit else gl[-limit:]
+
+
 def _is_note(b: dict) -> bool:
     text = b.get("en") or ""
     if _NOTE.search(text):
@@ -123,7 +176,7 @@ def _context(ws: Workspace, pages: list[int], new_blocks: bool = True, skip_head
     lines = [f"论文：{meta.get('title_en') or meta.get('source', '')}，共 {meta.get('page_count', '?')} 页。"]
     gl = paper.get("glossary", [])
     if gl:
-        lines.append("已有术语表（必须沿用）：" + "；".join(f"{g['en']} = {g['zh']}" for g in gl))
+        lines.append("已有术语表（必须沿用）：" + "；".join(f"{g['en']} = {g['zh']}" for g in _used_terms(paper, ws, pages)))
     heads = [f"{b.get('num', '')} {b.get('zh') or b.get('en', '')}".strip() for b in blocks if b.get("type") == "heading"]
     if heads:
         lines.append("已有的章节：" + " / ".join(heads))
@@ -131,7 +184,8 @@ def _context(ws: Workspace, pages: list[int], new_blocks: bool = True, skip_head
         return "\n".join(lines)
     ids = [b["id"] for b in blocks]
     if ids:
-        lines.append("已用过的块 id（不要重复）：" + ", ".join(ids[-60:]))
+        # 只报最近 30 个：模型只需要知道别跟紧邻的块重名，更早的 id 撞不上
+        lines.append("已用过的块 id（不要重复）：" + ", ".join(ids[-30:]))
     if skip_head:
         p = pages[0]
         lines.append(f"第 {p - 1} 页由另一批负责（同时在译，或者稍后重试），从第 {p - 1} 页跨到第 {p} 页的那一段由它补完整。"
@@ -163,9 +217,15 @@ def _context(ws: Workspace, pages: list[int], new_blocks: bool = True, skip_head
 
 def _page_texts(ws: Workspace, pages: list[int]) -> str:
     texts = []
+    paper = ws.load("paper")
+    total = paper.get("meta", {}).get("page_count") or 0
+    noise = _boiler_lines(ws, total) if total else set()
     for n in pages:
         p = ws.root / "extract" / f"page-{n:03d}.txt"
-        texts.append(f"===== 第 {n} 页（抽取的文字，公式和表格可能是乱的）=====\n" + (p.read_text(encoding="utf-8") if p.exists() else ""))
+        raw = p.read_text(encoding="utf-8") if p.exists() else ""
+        if noise:  # 只去掉整行完全相同的重复行，正文里同样的短句不动
+            raw = "\n".join(x for x in raw.splitlines() if x.strip() not in noise)
+        texts.append(f"===== 第 {n} 页（抽取的文字，公式和表格可能是乱的）=====\n" + raw)
     return "\n\n".join(texts)
 
 

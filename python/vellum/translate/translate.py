@@ -74,13 +74,16 @@ def scope_pages(ws: Workspace, scope: str | None) -> list[int] | None:
     return None
 
 
+HEAD_CHARS = 700    # 看下一页开头多少字：只够把跨页那半句读完，不用来翻译
+
+
 def _next_head(ws: Workspace, n: int, whole: bool = False) -> str:
     """下一页开头的抽取文字。whole：整页都给（不能看图的引擎在分段交界处，续文可能排在表格、图注后面）。"""
     p = ws.root / "extract" / f"page-{n:03d}.txt"
     if not p.exists():
         return ""
     text = p.read_text(encoding="utf-8")
-    return text if whole else text[:1500]
+    return text if whole else text[:HEAD_CHARS]
 
 
 def _normalize(data: dict, pages: list[int], taken: set[str]) -> dict:
