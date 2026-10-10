@@ -98,6 +98,7 @@ svg.i.sm { width: 15px; height: 15px; }
 .brand-back { gap: 3px; padding: 0 8px 0 4px; color: var(--ink-3); }
 .brand-back .mark { width: 24px; height: 24px; }
 .brand small { font: 400 12.5px/1 var(--ui); color: var(--ink-3); letter-spacing: .02em; margin-left: 2px; }
+img.mark, img.hero { object-fit: contain; }
 
 /* 按钮 */
 .btn {

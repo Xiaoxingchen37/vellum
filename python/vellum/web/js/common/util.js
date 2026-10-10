@@ -167,7 +167,9 @@ window.PR = window.PR || {};
     question: "M7.5 7.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.8M10 14.5v.01M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16z",
   };
   PR.HL_COLORS = [["yellow", PR.t("黄")], ["green", PR.t("绿")], ["blue", PR.t("蓝")], ["pink", PR.t("红")]];  // pink 历史上叫粉，现在画成红
-  PR.logo = (cls) => '<svg class="' + (cls || "mark") + '" viewBox="0 0 32 32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#2d6173"/><path d="M16 10.5C13.6 8.8 10.4 8.3 7 8.6v14.2c3.4-.3 6.6.2 9 1.9 2.4-1.7 5.6-2.2 9-1.9V8.6c-3.4-.3-6.6.2-9 1.9z" fill="#f6f3ec"/><path d="M16 10.5v14.2" stroke="#2d6173" stroke-width="1.2"/><path d="M9.4 13.4h4M9.4 16.4h4M9.4 19.4h2.6" stroke="#9fb7bf" stroke-width="1.6" stroke-linecap="round"/><path d="M18.6 13.4h4M18.6 16.4h4M18.6 19.4h2.6" stroke="#e0a84f" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  /* 应用图标（和窗口/MSI 图标同一张图）。导出成单文件 HTML 时，导出器会把
+     /web/logo.png 内联成 data URI，保持离线可用。 */
+  PR.logo = (cls) => '<img class="' + (cls || "mark") + '" src="/web/logo.png" alt="" aria-hidden="true">';
   PR.icon = (name, cls) => '<svg class="i' + (cls ? " " + cls : "") + '" viewBox="0 0 20 20" aria-hidden="true"><path d="' + (P[name] || "") + '"/></svg>';
   PR.icons = { menu: PR.icon("menu"), edit: PR.icon("edit", "sm"), note: PR.icon("note", "sm") };
 

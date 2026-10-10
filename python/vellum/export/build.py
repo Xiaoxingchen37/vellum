@@ -16,6 +16,7 @@ from ..library.store import Workspace
 
 _LINK = re.compile(r'<link rel="stylesheet" href="/web/([^"]+)"\s*/?>')
 _SCRIPT = re.compile(r'<script src="/web/([^"]+)"></script>')
+_WEB_URL = re.compile(r'([\'"(])/web/([^"\')]+\.(?:png|svg|jpg|jpeg|gif|webp))')
 
 
 def _data_uri(path: Path, mime: str) -> str:
@@ -36,6 +37,20 @@ def _script(rel: str) -> str:
     return f"<script>{js}</script>"
 
 
+def _inline_images(text: str) -> str:
+    """把 /web/*.png 之类的图片引用换成 data URI，导出后离线也能显示。"""
+    mimes = {".png": "image/png", ".svg": "image/svg+xml", ".jpg": "image/jpeg",
+             ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
+
+    def repl(m: re.Match) -> str:
+        path = WEB / m.group(2)
+        if not path.is_file():
+            return m.group(0)
+        return f"{m.group(1)}{_data_uri(path, mimes[path.suffix.lower()])}"
+
+    return _WEB_URL.sub(repl, text)
+
+
 def build(ws: Workspace, out: Path | None = None, assets: Path | None = None, extra: dict | None = None, lang: str | None = None, mobile: bool = False) -> Path:
     """assets：图片不内嵌、另存到这个目录（放到网站上时页面小很多，图按需加载）；extra：额外写进页面数据的内容；lang：界面语言，默认跟当前设置。
     mobile：手机版，只读；不带 PDF 原页图（没译的页除外，正文里要用它），体积小很多。"""
@@ -46,6 +61,7 @@ def build(ws: Workspace, out: Path | None = None, assets: Path | None = None, ex
     page = _LINK.sub(lambda m: _inline_css(m.group(1)), page)
     page = _SCRIPT.sub(lambda m: _script(m.group(1)), page)
     page = page.replace('<link rel="icon" href="/web/favicon.svg">', f'<link rel="icon" href="{_data_uri(WEB / "favicon.svg", "image/svg+xml")}">')
+    page = _inline_images(page)
     paper = ws.load("paper")
     images = {}
     done = set((paper.get("translation") or {}).get("done_pages") or []) if mobile else set()

@@ -150,11 +150,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings }: Props
     <div onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <header className="topbar">
         <span className="brand">
-          <svg className="mark" aria-hidden="true" viewBox="0 0 32 32">
-            <rect x="1" y="1" width="30" height="30" rx="8" fill="#2d6173" />
-            <path d="M16 10.5C13.6 8.8 10.4 8.3 7 8.6v14.2c3.4-.3 6.6.2 9 1.9 2.4-1.7 5.6-2.2 9-1.9V8.6c-3.4-.3-6.6.2-9 1.9z" fill="#f6f3ec" />
-            <path d="M16 10.5v14.2" stroke="#2d6173" strokeWidth="1.2" />
-          </svg>
+          <img className="mark" src="/logo-128.png" alt="" aria-hidden="true" />
           <span>Vellum</span>
         </span>
         <label className="search">

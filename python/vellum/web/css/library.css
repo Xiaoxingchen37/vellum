@@ -166,7 +166,7 @@
 
 /* 顶栏问号（js/library/help.js）：版本和更新放最上面，下面四块是遇到问题时要找的东西 */
 .help-head { display: flex; gap: 14px; align-items: center; margin-bottom: 8px; }
-.help-head .hero { width: 44px; height: 44px; }
+.help-head .hero { width: 44px; height: 44px; flex: none; display: block; }
 .help-head h2 { margin: 0 0 2px; font-family: var(--ui); }
 .help-btn { position: relative; }
 .help-btn .help-dot { display: none; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
