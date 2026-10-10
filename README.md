@@ -1,16 +1,15 @@
 # Vellum
 
-本地优先的文献翻译阅读器。导入英文 PDF，调用 MinerU 解析结构，用大模型逐段翻译，
-再按原始页面坐标渲染出**排版一致、公式可复制**的中文 PDF，并提供左英右中的对照阅读。
+本地优先的文献翻译阅读器。导入英文 PDF，用本机解析器读出带坐标与公式的结构，
+再用大模型逐段翻译，最后按原页坐标排成中文，并提供左英右中的对照阅读。
 
 ## 它能做什么
 
 - **导入 PDF**：拖拽或文件选择，论文自动进入本地文献库
-- **MinerU 解析**：调用 MinerU 云 API，得到带坐标与 LaTeX 公式的结构化 `middle.json`
-- **逐段翻译**：只翻译自然语言 span，公式与代码原样保留；翻译结果本地缓存、可断点续跑
-- **生成中文 PDF**：优先用 MinerU 的 `PdfLayout.ORIGINAL` 渲染（文字可选中、公式为矢量），
-  失败时自动回退到 PyMuPDF 覆盖渲染
-- **对照阅读**：左侧原文 PDF 带可点击高亮框，点击即跳到右侧对应译文；点击译文反向定位原文
+- **本机解析**：用 PDFium / PyMuPDF 在本机抽文字、图表边界和字符坐标，不需要云服务
+- **逐段翻译**：只翻译自然语言，公式与代码原样保留；翻译结果本地缓存、可断点续跑
+- **对照阅读**：左边原文页带高亮框，点一下跳到右边对应译文；点译文反向定位原文
+- **边读边问**：选中一段就能问 AI，读文献时带着上下文追问
 
 ## 架构
 
@@ -19,10 +18,12 @@ Tauri (React + TS)          界面：文献库 / 对照阅读 / 设置
       │ IPC
       ▼
 Rust 外壳                    窗口、侧车生命周期、端口发现、健康检查
-      │ spawn uvicorn
+      │ spawn vellum-sidecar.exe（打包版）或 python -m vellum（开发版）
       ▼
-Python 侧车 (FastAPI)        MinerU 客户端 + 三协议 LLM 层 + 翻译 + 渲染
+Python 侧车 (FastAPI)        本机 PDF 解析 + 三协议 LLM 层 + 翻译 + 渲染
 ```
+
+打包版把 Python 后端冻结成 `vellum-sidecar.exe` 一起装进去，**目标机器不需要装 Python**。
 
 ## 翻译协议支持
 
@@ -62,8 +63,7 @@ Responses 的异构 `output` 列表与 Anthropic 的类型化内容块。
 ```powershell
 conda create -n vellum python=3.12 -y
 conda activate vellum
-pip install fastapi "uvicorn[standard]" httpx PyMuPDF requests jinja2 python-multipart
-pip install "mineru>=4.0,<5"
+pip install pypdfium2 PyMuPDF pypdf pdfplumber pillow certifi truststore
 ```
 
 Rust 侧默认会在 `E:\miniforge3\envs\vellum` 等常见路径下查找解释器，
@@ -88,6 +88,15 @@ npm run tauri build
 产物：`src-tauri/target/release/bundle/msi/Vellum_0.2.0_x64_en-US.msi`。
 安装需要管理员权限（写 Program Files），装完不需要额外装 Python。
 
+**免安装用法**：把 `src-tauri/target/release/vellum.exe` 和
+`src-tauri/binaries/vellum-sidecar.exe` 按下面的结构放好，双击 `vellum.exe` 即可：
+
+```
+Vellum\
+  vellum.exe
+  binaries\vellum-sidecar.exe
+```
+
 ## Python 侧车单独调试
 
 ```powershell
@@ -107,13 +116,16 @@ $env:VELLUM_LIBRARY="D:\VellumLibrary"
 ```
 papers/<id>/
   source.pdf              原始 PDF
-  middle.json             MinerU 解析结果
-  middle.translated.json  译文回填后的结构
+  paper.json              结构化的原文与译文（对照阅读的数据源）
+  reader.json             你的译文修改、划线、笔记
+  item.json               标签、阅读状态、星标
   blocks.json             对照阅读用的块列表
   translation_cache.json  翻译缓存
-  translated.pdf          生成的中文 PDF
   meta.json                元数据
 ```
+
+也可以在应用里**设置 → 数据保存位置**把整个文献库换到别的文件夹（比如网盘同步目录），
+已有论文会整库复制过去，旧文件夹保留不删。
 
 API Key 保存在本机的 `config.json`（`%LOCALAPPDATA%\Vellum\config.json`），按服务商分别存放，
 不会写入文献库，也不会随论文导出。
