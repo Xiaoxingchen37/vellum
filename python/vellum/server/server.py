@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from .. import __version__
 from ..chat import answer_styles, chat, chat_models, chat_store, notehelp
 from ..pdf import figures, pdfwork
-from ..app import cli_models, config, i18n, open_link, prefs, updates
+from ..app import config, i18n, open_link, prefs, updates
 from ..engines import detect, engines, usage
 from ..translate import langs
 from ..library import trash
@@ -237,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
             cfg = config.load()
             return self._json(200, {"items": lib.list(), "token": app.token, "jobs": app.jobs.small_status(),
                                     "library_status": app.location.status, "other_device": app.location.marker.other_device(),
-                                    "engine": cfg.get("engine"), "engine_label": cli_models.engine_label(cfg),
+                                    "engine": cfg.get("engine"), "engine_label": config.engine_label(cfg),
                                     "first_run": config.is_first_run(), "version": __version__, "trash": len(trash.items(lib.root))})
         if path == "/api/update":  # 有没有新版本（一天最多问一次 GitHub）
             return self._json(200, updates.check(force=parse_qs(url.query).get("force") == ["1"]))
@@ -246,11 +246,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/config":
             cfg = config.load()
             return self._json(200, {"config": config.public(cfg), "presets": config.PRESETS,
-                                    "groups": config.PRESET_GROUPS, "engine_label": cli_models.engine_label(cfg)})
+                                    "groups": config.PRESET_GROUPS, "engine_label": config.engine_label(cfg)})
         if path == "/api/engines":
             cfg = config.load()
             found = detect.detect(cfg, fresh=parse_qs(url.query).get("fresh") == ["1"])
-            return self._json(200, {"found": found, "ready": detect.ready(cfg, found), "engine": cfg.get("engine"), "models": cli_models.listing()})
+            return self._json(200, {"found": found, "ready": detect.ready(cfg, found), "engine": cfg.get("engine")})
         if path == "/api/prefs":
             return self._json(200, prefs.load())
         if path == "/api/chat/models":

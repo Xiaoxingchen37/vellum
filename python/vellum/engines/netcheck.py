@@ -1,8 +1,8 @@
 """翻译、提问前先看一眼网络：连不上就立刻用中文说清楚怎么办（国内多半是没开梯子），不让人干等到超时。
 
-- problem(cfg)：按引擎找到它真正要连的地址，发一个请求；收到任何 HTTP 响应都算通。
+- problem(cfg)：找到接口地址，发一个请求；收到任何 HTTP 响应都算通。
 - explain(cfg, msg)：引擎跑到一半报错时，报错像网络问题就补一句该怎么办。
-- proxy_env()：梯子只开了“系统代理”时 Claude Code / Codex 读不到，把它转成 HTTPS_PROXY 传过去。
+- proxy_env()：把系统代理转成 HTTPS_PROXY，给需要它的子进程用。
 """
 from __future__ import annotations
 
@@ -34,19 +34,9 @@ _CERT_MARKS = ("证书校验失败", "certificate verification failed")  # i18n-
 _CERT = re.compile(r"CERTIFICATE_VERIFY_FAILED|certificate verify failed|self.signed certificate|unknown issuer", re.I)
 
 
-def _opencode_base() -> str:
-    """opencode 用哪个服务商不好直接读出来（配置可能分散在全局、项目、环境变量里），
-    它自己会在连不上时把原因写进 stderr。这里只做兜底探测，不作为主判断。"""
-    return ""
-
-
 def target(cfg: dict) -> dict | None:
     """{name, url, vpn}：vpn 表示国内要开梯子才连得上。"""
-    e = cfg.get("engine")
-    if e == "opencode":
-        # opencode 是本地进程，网络问题由它自己报出来；不做预检，免得误判。
-        return None
-    if e == "openai":
+    if cfg.get("engine") == "openai":
         o = cfg.get("openai") or {}
         url = (o.get("base_url") or "").strip().rstrip("/")
         if not url:

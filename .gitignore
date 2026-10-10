@@ -40,6 +40,8 @@
 /.agents/
 /.dev-*.log
 /work/
+/build/
+/src-tauri/binaries/
 /.tmp.patch
 /widget.patch
 

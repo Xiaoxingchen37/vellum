@@ -42,14 +42,17 @@ Responses 的异构 `output` 列表与 Anthropic 的类型化内容块。
 
 ## 引擎：直连 API 或 opencode CLI
 
-翻译引擎二选一，默认是**直连 API**：
+翻译走**直连 API**：填服务商地址 + Key 就能用，只要接口兼容上面三种协议之一即可，
+包括中转站和本机 Ollama。不依赖 opencode、Claude Code 等任何命令行工具。
 
-- **API（默认）**：填服务商地址 + Key 就能用。只要接口兼容上面三种协议之一即可，
-  包括中转站和本机 Ollama。
-- **opencode CLI（可选）**：复用本机已登录的 opencode，不必再填 Key。
-  调用时每次起一个私有服务（`--standalone`），不去抢占它自己的后台服务。
+设置页里没有单独配置"问 AI"的模型名单时，它会自动跟随翻译引擎。
 
-两条路都支持"边读边问 AI"；没有单独配置问 AI 的模型名单时，会自动跟随翻译引擎。
+## 数据保存位置
+
+文献库默认在 `%LOCALAPPDATA%\Vellum\library`。在**设置 → 数据保存位置**里可以改到任意文件夹
+（比如网盘同步目录）：已有论文会整库复制过去，旧文件夹保留不删，改完应用自动重启生效。
+
+打包版把 Python 后端冻结成了 `vellum-sidecar.exe` 一起装进去，**目标机器不需要装 Python**。
 
 ## 环境
 
@@ -76,10 +79,14 @@ npm run tauri dev
 ## 打包
 
 ```powershell
+# 1) 先冻结 Python 后端（需要装了 vellum 依赖的环境 + pip install pyinstaller）
+python build_sidecar.py
+# 2) 再打 MSI（会把 vellum-sidecar.exe 一起打包）
 npm run tauri build
 ```
 
-产物：`src-tauri/target/release/bundle/msi/Vellum_0.1.0_x64_en-US.msi`
+产物：`src-tauri/target/release/bundle/msi/Vellum_0.2.0_x64_en-US.msi`。
+安装需要管理员权限（写 Program Files），装完不需要额外装 Python。
 
 ## Python 侧车单独调试
 

@@ -194,25 +194,17 @@ export type DiscussionEntry = {
   by?: string;
 };
 
-export type EngineFound = {
-  found: boolean;
-  version: string;
-};
-
 export type EnginesResponse = {
-  found: { opencode?: EngineFound; ollama?: { running: boolean; models: string[] } };
+  found: { ollama?: { running: boolean; models: string[] } };
   ready: boolean;
   engine: string;
-  models: {
-    opencode?: { models: { id: string; name: string; provider: string; vision?: boolean }[] };
-  };
 };
 
 export type ConfigResponse = {
   config: {
     engine: string;
     target: string;
-    opencode: { command: string; model: string; vision: boolean; timeout: number };
+    library_dir: string;
     openai: {
       preset: string;
       base_url: string;
@@ -231,6 +223,19 @@ export type ConfigResponse = {
   presets: Preset[];
   groups: [string, string][];
   engine_label?: string;
+};
+
+/** `GET /api/library/location` — where the library lives and what else is around. */
+export type LibraryLocation = {
+  path: string;
+  exists: boolean;
+  writable: boolean;
+  papers: number;
+  bytes: number;
+  temp: boolean;
+  library_status: string;
+  restart_required?: boolean;
+  candidates?: { path: string; papers?: number }[];
 };
 
 /** One provider preset from the backend (`presets.py`). */
@@ -253,7 +258,7 @@ export type Preset = {
 export type ChatModelEntry = {
   id: string;
   name: string;
-  engine: "opencode" | "openai";
+  engine: "openai";
   model: string;
   label: string;
   source: string;

@@ -35,7 +35,7 @@ function App() {
   const refreshEngine = () => {
     getConfig()
       .then((c) => {
-        // The backend already formats this ("opencode · …" / "DeepSeek · …").
+        // The backend already formats this (e.g. "DeepSeek · deepseek-flash").
         setEngineLabel(c.engine_label || c.config.engine);
       })
       .catch(() => setEngineLabel(""));

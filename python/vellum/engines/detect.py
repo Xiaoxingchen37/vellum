@@ -1,12 +1,10 @@
-"""看看这台机器上有哪些现成能用的翻译引擎：opencode CLI、本机 Ollama。给设置页和首次引导用。"""
+"""看看这台机器上有没有本机 Ollama。给设置页和首次引导用。"""
 from __future__ import annotations
 
 import json
 import threading
 import time
 import urllib.request
-
-from . import engines
 
 _cache: dict = {}
 _lock = threading.Lock()
@@ -22,7 +20,7 @@ def _ollama() -> dict:
 
 
 def detect(cfg: dict, fresh: bool = False) -> dict:
-    """查一次要 1–2 秒（要跑 opencode --version）。有缓存就直接给，过期了在后台刷新，页面不用等。"""
+    """查一次本机 Ollama（约 1.5 秒超时）。有缓存就直接给，过期了在后台刷新，页面不用等。"""
     with _lock:
         cached = _cache.get("data")
         if cached and not fresh:
@@ -39,23 +37,9 @@ def warm(cfg: dict) -> None:
 
 
 def _refresh(cfg: dict) -> dict:
-    out: dict = {}
-
-    def cli(name, finder):
-        exe = finder(cfg[name])
-        out[name] = {"found": bool(exe), "version": engines._version(exe) if exe else ""}
-
-    threads = [threading.Thread(target=cli, args=("opencode", engines.opencode_path)),
-               threading.Thread(target=lambda: out.__setitem__("ollama", _ollama()))]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join(40)
+    out = {"ollama": _ollama()}
     with _lock:
         _cache.update(at=time.time(), data=out, busy=False)
-    if out.get("opencode", {}).get("found"):
-        from ..app.cli_models import probe_opencode
-        threading.Thread(target=probe_opencode, args=(cfg["opencode"], out["opencode"]["version"]), daemon=True).start()
     return out
 
 
@@ -69,10 +53,7 @@ def needs_key(o: dict) -> bool:
 
 def ready(cfg: dict, found: dict) -> bool:
     """当前选的引擎看起来能用吗（首次引导据此提示）。"""
-    e = cfg.get("engine")
-    if e == "opencode":
-        return bool(found.get("opencode", {}).get("found"))
-    if e == "openai":
+    if cfg.get("engine") == "openai":
         o = cfg["openai"]
         return bool(o.get("base_url") and o.get("model") and (o.get("api_key") or not needs_key(o)))
     return True

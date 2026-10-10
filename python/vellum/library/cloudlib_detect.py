@@ -21,7 +21,7 @@ def detect() -> list[dict]:
         except OSError:
             return
         seen.add(str(p).casefold())
-        found.append({"id": kind, "label": label, "root_path": str(p), "path": str(p / "EasyRead")})
+        found.append({"id": kind, "label": label, "root_path": str(p), "path": str(p / "Vellum")})
 
     # OneDrive 给出的环境变量可以覆盖用户自选的位置；未设置时不猜用户目录。
     for name in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
@@ -57,7 +57,7 @@ def detect() -> list[dict]:
 
 
 def target_path(value: str | Path) -> Path:
-    """已有库按原路径使用，普通同步文件夹只在 EasyRead 子目录里放论文。"""
+    """已有库按原路径使用，普通同步文件夹只在 Vellum 子目录里放论文。"""
     from ..app.i18n import tr
     if not isinstance(value, (str, Path)) or not str(value).strip():
         raise ValueError(tr("请选择文献库文件夹"))
@@ -65,7 +65,8 @@ def target_path(value: str | Path) -> Path:
     if not path.is_absolute():
         raise ValueError(tr("请输入完整的文件夹路径"))
     path = path.resolve()
-    if path.name.casefold() == "easyread" or (path.exists() and not path.is_dir()):
+    # 旧库目录名 easyread 仍按原路径使用，避免把老用户的库套进新子目录。
+    if path.name.casefold() in ("easyread", "vellum") or (path.exists() and not path.is_dir()):
         return path
     if path.is_dir():
         # 未完成迁移也必须交给 inspect 原地检查，不能套一层目录后绕过事务标记。
@@ -75,4 +76,4 @@ def target_path(value: str | Path) -> Path:
         if any(not child.name.startswith(".") and (child / "item.json").is_file()
                for child in path.iterdir()):
             return path
-    return path / "EasyRead"
+    return path / "Vellum"

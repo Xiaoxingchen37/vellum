@@ -54,7 +54,7 @@ def _base(o: dict) -> str:
 def _headers(o: dict, stream: bool = False) -> dict:
     # 要带 User-Agent：Python 默认的 "Python-urllib/x" 会被 Cloudflare 后面的接口（比如 OpenCode）直接拦掉，报 403 error code: 1010
     # x-opencode-session：OpenCode Go 要求带一个稳定的会话 ID，不带报 400 MissingSessionID；别的服务商会忽略这个头
-    h = {"Content-Type": "application/json", "User-Agent": f"EasyRead/{__version__}", "x-opencode-session": _SESSION}
+    h = {"Content-Type": "application/json", "User-Agent": f"Vellum/{__version__}", "x-opencode-session": _SESSION}
     if kind(o) == "messages":
         # Anthropic 用 x-api-key，不认 Bearer；额外要求 anthropic-version。
         h["anthropic-version"] = "2023-06-01"

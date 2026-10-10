@@ -13,7 +13,7 @@ export type BackendStatus = {
   library_root?: string | null;
 };
 
-function inTauri(): boolean {
+export function inTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 

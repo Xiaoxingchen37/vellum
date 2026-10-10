@@ -45,31 +45,42 @@ pub struct Sidecar {
     python: PathBuf,
 }
 
+/// How the sidecar is being run, for the status the UI shows.
+#[derive(Clone, Copy, PartialEq)]
+enum Launcher {
+    /// A packaged `vellum-sidecar.exe` next to the app (no Python needed).
+    Frozen,
+    /// An interpreter running `-m vellum` (development).
+    Interpreter,
+}
+
 impl Sidecar {
     /// Locate an interpreter, reserve a port and start the sidecar.
     pub fn start() -> Result<Self, SidecarError> {
-        let python = discover_python()?;
+        let (program, launcher) = match frozen_sidecar() {
+            Some(exe) => (exe, Launcher::Frozen),
+            None => (discover_python()?, Launcher::Interpreter),
+        };
         let port = pick_port()?;
-        let library_root = default_library_root();
 
-        let project_root = find_python_package_root();
-        let mut command = Command::new(&python);
-        command
-            .arg("-m")
-            .arg("vellum")
-            .arg("serve")
-            .arg("--port")
-            .arg(port.to_string());
-        if let Some(root) = &project_root {
-            command.env("PYTHONPATH", root);
+        // Frozen build: `vellum-sidecar.exe serve --port N`.
+        // Dev build: `python -m vellum serve --port N` with the package on PYTHONPATH.
+        let mut command = Command::new(&program);
+        if launcher == Launcher::Interpreter {
+            command.arg("-m").arg("vellum");
         }
-        if let Some(library) = &library_root {
-            command.env("VELLUM_LIBRARY", library);
-            // Keep config/logs beside the library so a portable install stays
-            // self-contained (instead of dropping files in the source tree).
-            if let Some(home) = default_home_root() {
-                command.env("VELLUM_HOME", home);
+        command.arg("serve").arg("--port").arg(port.to_string());
+        if launcher == Launcher::Interpreter {
+            if let Some(root) = find_python_package_root() {
+                command.env("PYTHONPATH", root);
             }
+        }
+        // Config and logs live beside the data directory. The library location
+        // itself is NOT forced here: it comes from config.json (the user can
+        // change it in Settings), and VELLUM_LIBRARY remains an explicit
+        // override for portable installs and tests.
+        if let Some(home) = default_home_root() {
+            command.env("VELLUM_HOME", home);
         }
         command
             .env("PYTHONIOENCODING", "utf-8")
@@ -95,7 +106,7 @@ impl Sidecar {
         let mut sidecar = Sidecar {
             child: Some(child),
             port,
-            python,
+            python: program,
         };
 
         sidecar.wait_until_healthy()?;
@@ -111,7 +122,9 @@ impl Sidecar {
             base_url: self.base_url(),
             python: self.python.display().to_string(),
             healthy: self.health_ok(),
-            library_root: default_library_root(),
+            // The data directory is a user setting now; report the override
+            // only when one is actually in force.
+            library_root: std::env::var("VELLUM_LIBRARY").ok(),
         }
     }
 
@@ -215,6 +228,32 @@ fn discover_python() -> Result<PathBuf, SidecarError> {
     Err(SidecarError::NoInterpreter)
 }
 
+/// A packaged sidecar shipped next to the executable. Preferred over a Python
+/// interpreter so an installed build runs with no Python on the machine.
+///
+/// A `VELLUM_SIDECAR` override wins (useful for testing a specific build).
+fn frozen_sidecar() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("VELLUM_SIDECAR") {
+        let path = PathBuf::from(explicit);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    // Tauri puts bundled resources in different places per platform; check the
+    // layout the Windows MSI produces plus the dev tree.
+    for candidate in [
+        exe_dir.join("vellum-sidecar.exe"),
+        exe_dir.join("binaries").join("vellum-sidecar.exe"),
+        exe_dir.join("resources").join("vellum-sidecar.exe"),
+    ] {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 fn which(name: &str) -> Result<PathBuf, ()> {
     let Ok(path_var) = std::env::var("PATH") else {
         return Err(());
@@ -270,16 +309,8 @@ fn find_python_package_root() -> Option<PathBuf> {
     None
 }
 
-fn default_library_root() -> Option<String> {
-    if let Ok(explicit) = std::env::var("VELLUM_LIBRARY") {
-        return Some(explicit);
-    }
-    let base = std::env::var("LOCALAPPDATA").ok()?;
-    Some(format!("{base}\\Vellum\\library"))
-}
-
 /// Where the Python side keeps config.json and logs. Defaults to the parent of
-/// the library directory (``%LOCALAPPDATA%\Vellum``).
+/// the data directory (``%LOCALAPPDATA%\Vellum``).
 fn default_home_root() -> Option<String> {
     if let Ok(explicit) = std::env::var("VELLUM_HOME") {
         return Some(explicit);

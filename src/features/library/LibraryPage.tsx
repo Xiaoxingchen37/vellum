@@ -169,7 +169,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings }: Props
         <span className="grow" />
         <button className="engine-chip" onClick={onOpenSettings} title="模型设置">
           <span className="dot" />
-          <span>{engineLabel || "opencode"}</span>
+          <span>{engineLabel || "未配置模型"}</span>
         </button>
         <button className="btn accent" onClick={() => fileRef.current?.click()} disabled={importing}>
           {importing ? <Loader2 size={15} className="spin" /> : <FileUp size={15} />}

@@ -1,6 +1,6 @@
-"""翻译花了多少：token 数，Claude Code 订阅还能看到 5 小时 / 7 天额度用了百分之几。
+"""翻译花了多少：token 数。
 
-每次调用模型后，各引擎把返回里的用量交给 Meter；整篇翻译时 Meter 的累计写进 job.json 给页面显示。
+每次调用模型后把返回里的用量交给 Meter；整篇翻译时 Meter 的累计写进 job.json 给页面显示。
 input 是全部输入 token（含命中缓存的部分），cached 是其中命中缓存的，output 是输出。
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ class Meter:
             if cost_usd is not None:
                 d["cost_usd"] = round(d.get("cost_usd", 0) + float(cost_usd), 4)
             if limits:
-                d["limits"] = limits  # 整个账号的额度（同时在用 Claude Code 干别的也算在里面），只记最新的
+                d["limits"] = limits  # 整个账号的额度，只记最新的
         if limits:
             remember(limits)
 
@@ -56,7 +56,7 @@ def remember(limits: dict) -> None:
 
 
 def latest() -> dict | None:
-    """{"limits": {...}, "at": 时间戳}；还没用 Claude Code 订阅调用过就是 None。"""
+    """{"limits": {...}, "at": 时间戳}；没有额度信息的接口返回 None。"""
     return read_json(_limits_path(), None)
 
 
@@ -73,23 +73,7 @@ def merge(total: dict | None, run: dict) -> dict:
     return out
 
 
-# ---------- 各引擎返回的用量 ----------
-def from_opencode(part: dict) -> dict:
-    """opencode ``run --format json`` 的 step_finish 事件里的 tokens。
-
-    opencode 把用量放在 ``part["tokens"]``：input / output / reasoning / cache{read,write}，
-    可能还带 ``cost``（按官方价折算）。context 大小用 input+output 估算。
-    """
-    t = (part or {}).get("tokens") or {}
-    cache = t.get("cache") or {}
-    cached = int(cache.get("read") or 0)
-    rec = {"input": int(t.get("input") or 0), "cached": cached, "output": int(t.get("output") or 0)}
-    cost = (part or {}).get("cost")
-    if cost:
-        rec["cost_usd"] = float(cost)
-    return rec
-
-
+# ---------- 接口返回的用量 ----------
 def from_openai(res: dict) -> dict:
     """Chat Completions 或 Responses 返回的 usage（DeepSeek 的缓存命中数字段名不一样）。"""
     u = (res or {}).get("usage") or {}

@@ -25,7 +25,7 @@ SERVER_INFO = HOME / ".server.json"
 DEFAULTS = {
     "library_dir": str(HOME / "library"),
     "port": 8765,
-    # openai（直连任意 OpenAI 兼容接口，默认，不依赖任何 CLI）| opencode（本机 CLI 无头）| none
+    # openai（直连任意 OpenAI 兼容接口，默认，不依赖任何 CLI）| none（不翻译）
     "engine": "openai",
     "auto_translate": True,      # 导入后自动开始翻译
     "target": "zh",              # 译文语言，见 langs.py
@@ -34,11 +34,6 @@ DEFAULTS = {
     "page_cap": 60,              # 全文超过多少页先确认；0 表示不限
     "concurrency": 0,            # 同时译几段（分段并行，见 segments.py）；0 是自动，每段约 2 批、最多 4 段；手动最多 8 段
     "concurrency_v": 2,          # 1.3.1 起 concurrency 的意思变了，旧配置的 1 当成自动，见 load
-    # opencode：用本机 opencode CLI。model 形如 provider/model（如 workbuddy/global:deepseek-v4.1-flash）；
-    # 留空则用 opencode 自己的默认模型。vision 表示该模型能看图（决定是否把原页图作为附件发过去）。
-    # standalone：每次调用起一个私有服务，而不是去抢 opencode 的后台托管服务——托管服务常被用户
-    # 日常用的 opencode 占住端口，导致每次翻译先重试约 25 秒再失败。默认开，只有特殊环境才需要关。
-    "opencode": {"command": "opencode", "model": "", "vision": True, "standalone": True, "extra_args": [], "timeout": 1200},
     # api：chat（/chat/completions）| responses（/responses）| messages（Anthropic /messages），见 openai_api.py
     "openai": {"preset": "", "base_url": "", "api": "chat", "api_key": "", "model": "", "vision": False, "timeout": 600},
     # 阅读页右侧“问 AI”的模型名单和默认模型，见 chat_models.py
@@ -65,12 +60,27 @@ def _saved() -> dict:
     elif raw.get("concurrency_v") != 2 and isinstance(raw.get("concurrency"), int) and raw["concurrency"] > 4:
         raw["concurrency"] = 4  # 以前的 6 是“同时 6 批”，现在是“同时 6 段”：升级时不替老用户开到 4 段以上
     raw["concurrency_v"] = 2
+    # opencode CLI 已从产品里去掉：老配置（engine=opencode）自动回到直连 API。
+    if raw.get("engine") == "opencode":
+        raw["engine"] = "openai"
+    raw.pop("opencode", None)  # 已经没有引擎读它了，留着只会让人以为还在用
     # 老版本把“问 AI”的名单写死成 opencode 一项。现在默认引擎是直连 API，这种没动过的名单
     # 会让“问 AI”继续走 opencode；清空它，改由 chat_models 跟随当前翻译引擎。
     chat = raw.get("chat")
     if isinstance(chat, dict) and _legacy_chat(chat.get("models")):
         chat.pop("models", None)
         chat.pop("default", None)
+    elif isinstance(chat, dict) and isinstance(chat.get("models"), list):
+        # 去掉指向 opencode 的条目；去空了就跟随翻译引擎。
+        kept = [m for m in chat["models"] if isinstance(m, dict) and m.get("engine") != "opencode"]
+        if len(kept) != len(chat["models"]):
+            if kept:
+                chat["models"] = kept
+                if chat.get("default") and not any(m.get("id") == chat["default"] for m in kept):
+                    chat.pop("default", None)
+            else:
+                chat.pop("models", None)
+                chat.pop("default", None)
     return raw
 
 
@@ -130,3 +140,13 @@ def library_dir(cfg: dict | None = None) -> Path:
     p = Path((cfg or load())["library_dir"])
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def engine_label(cfg: dict) -> str:
+    """文献库右上角的引擎标签，如 “DeepSeek · deepseek-flash”。"""
+    from .i18n import tr
+    e = cfg.get("engine")
+    if e == "openai":
+        name = next((p["name"] for p in PRESETS if p["id"] == cfg["openai"].get("preset")), "API")
+        return f"{name.split('（')[0]} · {cfg['openai'].get('model') or tr('未填模型')}"  # i18n-ok （ 是拆预设名
+    return tr("不翻译") if e == "none" else (e or "")

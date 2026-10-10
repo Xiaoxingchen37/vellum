@@ -138,7 +138,7 @@ def _marks(ws: Workspace, colors: set[str] | None = None) -> str:
             parts.append(line)
             used += len(line)
     return ("读者在译文上做的标记（按颜色分组，读者说“红的”“黄色那些”就是指这里；每处附所在段落译文，行内公式是 $TeX$）：\n"  # i18n-ok
-            + "\n".join(parts) + ("\n（标记太多，只列了一部分；Claude Code 可以 Read reader.json 看全部）" if used > MARKS_BUDGET else ""))  # i18n-ok
+            + "\n".join(parts) + ("\n（标记太多，只列了一部分）" if used > MARKS_BUDGET else ""))  # i18n-ok
 
 
 MARK_WORDS = re.compile(r"标[红黄绿蓝记了过的出注]|划线|划过|划的|画线|高亮|涂|颜色|[红黄绿蓝][色的]|笔记|批注|标记|我的问题|highlight", re.I)  # i18n-ok
@@ -169,8 +169,7 @@ def prompt(ws: Workspace, messages: list[dict], anchor: str | None, quote: str, 
     history = messages[-HISTORY:]
     convo = "\n\n".join(("读者" if m["role"] == "user" else "你") + "：" + m["content"] for m in history[:-1])  # i18n-ok
     ask = history[-1]["content"] if history else ""
-    tool = ("需要看全文时，用 Read 工具读当前目录的 paper.json（blocks 里是译文和原文）；读者的全部标记在 reader.json 的 notes 里。\n"  # i18n-ok
-            if engine in ("opencode", "claude") else "")
+    tool = ""  # 直连接口没有文件工具，全文与标记都在上面的上下文里给足
     want, colors = wants_marks(ask)
     marks = _marks(ws, colors) if want else _marks_summary(ws)
     style = {answer_styles.STE100: answer_styles.STE100_INSTRUCTIONS,
@@ -198,71 +197,9 @@ def stream(ecfg: dict, text: str, cwd: Path, cancel: threading.Event, on_model=N
     if bad:
         raise engines.EngineError(bad)
     try:
-        if e == "opencode":
-            yield from _stream_opencode(ecfg["opencode"], text, cwd, cancel, on_model, meter)
-        elif e == "openai":
+        if e == "openai":
             yield from openai_api.stream(ecfg["openai"], text, cancel, meter)
         else:
             yield engines.run(engines.for_translation(ecfg), text, cwd, None, cancel, meter)
     except engines.EngineError as err:
         raise engines.EngineError(netcheck.explain(ecfg, str(err))) from None
-
-
-def _stream_opencode(c: dict, text: str, cwd: Path, cancel, on_model=None, meter=None) -> Iterator[str]:
-    """用 opencode 的默认 agent 流式回答：可以自己读 paper.json / reader.json 看全文和标记。
-
-    opencode ``run --format json`` 一行一个事件，text part 到一条就交一条；这样问答也接近
-    逐字流出的体验。prompt 走 stdin，避开 Windows 命令行长度上限。
-    """
-    exe = engines.opencode_path(c)
-    if not exe:
-        raise engines.EngineError(tr("找不到 opencode 命令（先安装 opencode CLI）"))
-    from ..app import config
-    home = config.HOME
-    args = [exe, "run", "--format", "json"]
-    if c.get("model"):
-        args += ["--model", c["model"]]
-    args += list(c.get("extra_args") or [])
-    proc = engines._popen(args, home)
-    proc.stdin.write(text)
-    proc.stdin.close()
-    done = threading.Event()
-
-    def kill_on_cancel():
-        while not done.wait(0.2):
-            if cancel.is_set():
-                if proc.poll() is None:
-                    proc.kill()
-                return
-
-    threading.Thread(target=kill_on_cancel, daemon=True).start()
-    got = False
-    err = ""
-    try:
-        for line in proc.stdout:
-            if cancel.is_set():
-                raise engines.Cancelled()
-            try:
-                ev = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            kind = ev.get("type")
-            if kind == "text":
-                piece = (ev.get("part") or {}).get("text") or ""
-                if piece:
-                    got = True
-                    yield piece
-            elif kind == "step_finish" and meter is not None:
-                meter.add(**usage.from_opencode(ev.get("part") or {}))
-            elif kind == "error":
-                e2 = ev.get("error") or {}
-                err = str(e2.get("message") or e2.get("name") or e2)
-        if err and not got:
-            raise engines.EngineError(tr("opencode 出错：{msg}", msg=err[:500]))
-        if not got:
-            stderr = (proc.stderr.read() or "")[-400:]
-            raise engines.EngineError(stderr or tr("opencode 没有输出"))
-    finally:
-        if proc.poll() is None:
-            proc.kill()
-        done.set()  # 让 kill_on_cancel 线程退出

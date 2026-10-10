@@ -1,7 +1,7 @@
 """“问 AI”用哪些模型：设置里一张短名单，可以增删改。
 
-每一项：{"id", "name", "engine": "opencode" | "openai", "model", "preset"（API 服务商）, "base_url"（自定义地址时）,
-         "api"（chat | responses，不填跟服务商默认）}
+每一项：{"id", "name", "engine": "openai", "model", "preset"（API 服务商）, "base_url"（自定义地址时）,
+         "api"（chat | responses | messages，不填跟服务商默认）}
 API 的 Key 用翻译引擎那边按服务商存的同一份（openai.keys），不用填两次。
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ from ..engines.presets import PRESETS
 from ..app.i18n import tr
 
 # 默认空名单：没有单独配“问 AI”用哪些模型时，直接跟随当前翻译引擎（见 from_engine）。
-# 这样只装了直连 API、完全没装 opencode 的机器，边读边问 AI 也能用。
+# 这样只配了一个接口，边读边问 AI 也能用。
 DEFAULT_MODELS: list[dict] = []
 _SEEN_PATH = None  # config.HOME / ".models-seen.json"，懒加载避免循环导入
 
@@ -31,7 +31,7 @@ def pretty(model_id: str) -> str:
 
 
 def remember(alias: str, actual: str) -> None:
-    """记下别名实际对应的模型（保留接口，opencode 暂不需要）。"""
+    """记下别名实际对应的模型（保留接口，当前引擎暂不需要）。"""
     if not alias or not actual or alias == actual:
         return
     from ..library.store import read_json, write_json_atomic
@@ -51,8 +51,6 @@ DEFAULT_CHAT = {"models": [], "default": ""}
 
 def from_engine(cfg: dict) -> dict:
     """把当前翻译引擎当作一个对话模型。名单为空时用它，省得用户配两遍。"""
-    if cfg.get("engine") == "opencode":
-        return {"id": "translate", "name": tr("跟随翻译引擎"), "engine": "opencode", "model": ""}
     o = cfg.get("openai") or {}
     return {"id": "translate", "name": tr("跟随翻译引擎"), "engine": "openai", "preset": o.get("preset", ""),
             "base_url": o.get("base_url", ""), "model": o.get("model", ""), "api": o.get("api", "")}
@@ -66,7 +64,7 @@ def models(cfg: dict) -> list[dict]:
 def find(cfg: dict, mid: str | None) -> dict:
     ms = models(cfg)
     want = mid or (cfg.get("chat") or {}).get("default")
-    return next((m for m in ms if m.get("id") == want), ms[0] if ms else DEFAULT_MODELS[0])
+    return next((m for m in ms if m.get("id") == want), ms[0] if ms else from_engine(cfg))
 
 
 def _key(cfg: dict, preset: str) -> str:
@@ -82,10 +80,7 @@ def engine_cfg(cfg: dict, mid: str | None) -> tuple[dict, dict]:
     m = find(cfg, mid)
     out = copy.deepcopy(cfg)
     out["engine"] = m["engine"]
-    if m["engine"] == "opencode":
-        # 聊天卡片没指定模型时，跟随翻译引擎配的模型；翻译也没配才用 opencode 默认。
-        out["opencode"]["model"] = m.get("model") or cfg.get("opencode", {}).get("model") or ""
-    elif m["engine"] == "openai":
+    if m["engine"] == "openai":
         p = next((x for x in PRESETS if x["id"] == m.get("preset")), None)
         out["openai"] = {**out["openai"], "preset": m.get("preset") or "", "vision": False,
                          "base_url": m.get("base_url") or (p["base_url"] if p else out["openai"].get("base_url", "")),
@@ -99,16 +94,13 @@ def engine_cfg(cfg: dict, mid: str | None) -> tuple[dict, dict]:
 
 def translation_id(cfg: dict) -> str:
     """名单里哪一张就是翻译用的那个模型（设置里标着“翻译”的卡片）；对不上返回空。"""
-    e = cfg.get("engine")
+    if cfg.get("engine") != "openai":
+        return ""
+    o = cfg.get("openai", {})
     for m in models(cfg):
-        if m.get("engine") != e:
-            continue
-        if e == "opencode" and (m.get("model") or "") == (cfg.get("opencode", {}).get("model") or ""):
+        if m.get("engine") == "openai" and (m.get("preset") or "") == (o.get("preset") or "") \
+                and (m.get("model") or "") == (o.get("model") or ""):
             return m["id"]
-        if e == "openai":
-            o = cfg.get("openai", {})
-            if (m.get("preset") or "") == (o.get("preset") or "") and (m.get("model") or "") == (o.get("model") or ""):
-                return m["id"]
     return ""
 
 
@@ -120,21 +112,14 @@ def label(m: dict) -> str:
 def listing(cfg: dict) -> dict:
     """给页面：名单 + 每项能不能用、来源说明。"""
     from ..engines.detect import detect, needs_key
-    found = detect(cfg)
     out = []
     for m in models(cfg):
-        e = m.get("engine")
-        if e == "opencode":
-            ready = bool(found.get("opencode", {}).get("found"))
-            source = "opencode CLI"
-            hint = "" if ready else tr("本机没找到 opencode")
-        else:
-            p = next((x for x in PRESETS if x["id"] == m.get("preset")), None)
-            ready = bool(_key(cfg, m.get("preset") or "")) or not needs_key({"preset": m.get("preset"), "base_url": m.get("base_url", "")})
-            source = p["name"] if p else tr("自定义地址")
-            hint = "" if ready else tr("还没填 {source} 的 Key（设置 → 模型 → 点这张卡片 → 修改）", source=source)
+        p = next((x for x in PRESETS if x["id"] == m.get("preset")), None)
+        ready = bool(_key(cfg, m.get("preset") or "")) or not needs_key({"preset": m.get("preset"), "base_url": m.get("base_url", "")})
+        source = p["name"] if p else tr("自定义地址")
+        hint = "" if ready else tr("还没填 {source} 的 Key（设置 → 模型 → 点这张卡片 → 修改）", source=source)
         out.append({**m, "label": label(m), "source": source, "ready": ready, "hint": hint,
-                    "detail": m.get("model") or (tr("跟随 opencode 默认") if e == "opencode" else "")})
+                    "detail": m.get("model") or ""})
     default = (cfg.get("chat") or {}).get("default") or (out[0]["id"] if out else "")
     return {"models": out, "default": default, "translate": translation_id(cfg), "presets": [{"id": p["id"], "name": p["name"], "models": p.get("models", []), "api": p.get("api", "chat")} for p in PRESETS]}
 
@@ -143,14 +128,13 @@ def sanitize(items: list[dict]) -> list[dict]:
     """设置页提交的名单：去掉空项、补 id。"""
     out, seen = [], set()
     for k, m in enumerate(items or []):
-        e = m.get("engine")
-        if e not in ("opencode", "openai") or (e == "openai" and not (m.get("preset") or m.get("base_url"))):
+        if m.get("engine") != "openai" or not (m.get("preset") or m.get("base_url")):
             continue
         mid = re.sub(r"[^\w\-]", "-", str(m.get("id") or f"m{k}"))[:40] or f"m{k}"
         while mid in seen:
             mid += "-2"
         seen.add(mid)
-        out.append({"id": mid, "name": str(m.get("name") or m.get("model") or tr("模型"))[:40], "engine": e,
+        out.append({"id": mid, "name": str(m.get("name") or m.get("model") or tr("模型"))[:40], "engine": "openai",
                     "model": str(m.get("model") or "")[:120], "preset": str(m.get("preset") or ""), "base_url": str(m.get("base_url") or "")[:300],
                     "api": m.get("api") if m.get("api") in ("chat", "responses", "messages") else ""})
-    return out or copy.deepcopy(DEFAULT_MODELS)
+    return out

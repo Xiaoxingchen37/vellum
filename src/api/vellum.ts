@@ -1,9 +1,11 @@
 /** Typed calls against the Vellum Python sidecar. */
-import { api, backendUrl } from "./backend";
+import { invoke } from "@tauri-apps/api/core";
+import { api, backendUrl, inTauri } from "./backend";
 import type {
   ChatModelsResponse,
   ConfigResponse,
   EnginesResponse,
+  LibraryLocation,
   PaperSummary,
   ReaderPayload,
 } from "./types";
@@ -42,6 +44,42 @@ export function getEngines(fresh = false): Promise<EnginesResponse> {
 
 export function getConfig(): Promise<ConfigResponse> {
   return api<ConfigResponse>("/api/config");
+}
+
+/** Where the library lives now, and what other libraries were detected. */
+export function getLibraryLocation(): Promise<LibraryLocation> {
+  return api<LibraryLocation>("/api/library/location");
+}
+
+/** Ask the backend to pop the native "pick a folder" dialog. */
+export function pickFolder(title: string): Promise<{ supported: boolean; path: string }> {
+  return api<{ supported: boolean; path: string }>("/api/library/pick-folder", {
+    method: "POST",
+    headers: { "X-Token": sessionToken },
+    body: JSON.stringify({ title }),
+  });
+}
+
+/**
+ * Move the library to another folder. `mode` mirrors the backend: "copy" copies
+ * the current library there, "use" points at an existing library, "merge" merges.
+ * Takes effect after a restart.
+ */
+export function moveLibrary(
+  path: string,
+  mode: "copy" | "use" | "merge" = "copy",
+): Promise<{ ok: boolean; path: string; copied?: number; message?: string; restart_required?: boolean }> {
+  return api("/api/library/move", {
+    method: "POST",
+    headers: { "X-Token": sessionToken },
+    body: JSON.stringify({ path, mode }),
+  });
+}
+
+/** Restart the sidecar (used after changing the library location). */
+export async function restartBackend(): Promise<void> {
+  if (!inTauri()) throw new Error("只有在桌面版里才能自动重启");
+  await invoke("restart_backend");
 }
 
 export function getChatModels(): Promise<ChatModelsResponse> {
