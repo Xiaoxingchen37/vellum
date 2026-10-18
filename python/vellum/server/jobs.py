@@ -20,7 +20,9 @@ from ..library.store import Workspace, now_iso
 
 def engine_for(cfg: dict, model: str | None) -> dict:
     """导入时选了“问 AI”名单里的模型就用它，否则用设置里的翻译引擎。名单里已经没有这个模型了，也用翻译引擎。"""
-    m = next((x for x in chat_models.models(cfg) if x.get("id") == model), None) if model else None
+    if not model or model == "translate":
+        return cfg
+    m = next((x for x in chat_models.models(cfg) if x.get("id") == model), None)
     if not m:
         return cfg
     out, _ = chat_models.engine_cfg(cfg, model)

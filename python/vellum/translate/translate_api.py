@@ -26,7 +26,11 @@ def enqueue(jobs, ws, body: dict) -> dict:
                 cap_check = False  # 用户已选择更小的明确范围。
     if body.get("failed"):
         pages = sorted(int(k) for k in (last.get("failed") or {})) or None
-        read, model, target = bool(last.get("read")), last.get("model") or "", last.get("target") or ""
+        read = bool(last.get("read"))
+        req_model = str(body.get("model") or "").strip()
+        last_model = last.get("model") or ""
+        model = req_model if req_model else ("" if last_model in ("", "translate", "opencode") else last_model)
+        target = str(body.get("target") or last.get("target") or "")
     elif body.get("en"):
         read = False
         if not explicit and not pending:

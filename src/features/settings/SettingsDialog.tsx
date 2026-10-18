@@ -62,6 +62,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
   const [savedKeys, setSavedKeys] = useState<string[]>([]);
   const [fetched, setFetched] = useState<string[]>([]);
   const [fetchMsg, setFetchMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [testMsg, setTestMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [typingModel, setTypingModel] = useState(false);
 
   // Data location.
@@ -115,6 +116,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
     setPreset(id);
     setFetched([]);
     setFetchMsg(null);
+    setTestMsg(null);
     setTypingModel(false);
     if (p) {
       setBaseUrl(p.base_url);
@@ -123,13 +125,22 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
       const pick = p.model || first?.id || "";
       setModel(pick);
       setVision(!!p.models?.find((m) => m.id === pick)?.vision);
+      setApiKey(hasKey(id) ? "••••" : "");
     } else {
-      setBaseUrl("");
-      setApi("chat");
-      setModel("");
-      setVision(false);
+      if (config?.openai?.preset === "") {
+        setBaseUrl(config?.openai?.base_url ?? "");
+        setApi(config?.openai?.api ?? "chat");
+        setModel(config?.openai?.model ?? "");
+        setVision(config?.openai?.vision ?? false);
+        setApiKey(config?.openai?.api_key ? "••••" : "");
+      } else {
+        setBaseUrl("");
+        setApi("chat");
+        setModel("");
+        setVision(false);
+        setApiKey("");
+      }
     }
-    setApiKey(hasKey(id) ? "••••" : "");
   };
 
   const onPickModel = (id: string) => {
@@ -188,9 +199,22 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
 
   const test = async () => {
     setBusy(true);
+    setTestMsg(null);
     try {
-      const r = await testEngine("openai");
+      const r = await testEngine("openai", {
+        preset,
+        base_url: baseUrl.trim(),
+        api,
+        api_key: apiKey,
+        model: model.trim(),
+        vision,
+      });
+      setTestMsg({ text: r.message, ok: r.ok });
       push(r.message, r.ok ? "ok" : "err");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "测试出错";
+      setTestMsg({ text: msg, ok: false });
+      push(msg, "err");
     } finally {
       setBusy(false);
     }
@@ -306,7 +330,17 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
                   className="input"
                   value={baseUrl}
                   placeholder="https://…/v1"
-                  onChange={(e) => setBaseUrl(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setBaseUrl(next);
+                    if (
+                      preset === "" &&
+                      apiKey.startsWith("••••") &&
+                      next.trim() !== (config?.openai?.base_url || "").trim()
+                    ) {
+                      setApiKey("");
+                    }
+                  }}
                 />
               </label>
               <label className="field">
@@ -462,6 +496,21 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
               </p>
             ) : null}
           </div>
+
+          {testMsg ? (
+            <div className="field">
+              <span
+                style={{
+                  color: testMsg.ok ? "var(--ok, #10b981)" : "var(--danger, #ef4444)",
+                  fontSize: 13,
+                  lineHeight: 1.4,
+                  wordBreak: "break-all",
+                }}
+              >
+                {testMsg.text}
+              </span>
+            </div>
+          ) : null}
 
           <div className="actions">
             {dirChanged ? (

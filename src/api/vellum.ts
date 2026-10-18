@@ -260,11 +260,14 @@ export function saveChatModels(body: Record<string, unknown>): Promise<ChatModel
   });
 }
 
-export function testEngine(engine: string): Promise<{ ok: boolean; message: string }> {
+export function testEngine(
+  engine: string,
+  openai?: Record<string, unknown>,
+): Promise<{ ok: boolean; message: string }> {
   return api<{ ok: boolean; message: string }>("/api/config/test", {
     method: "POST",
     headers: { "X-Token": sessionToken },
-    body: JSON.stringify({ engine }),
+    body: JSON.stringify({ engine, ...(openai ? { openai } : {}) }),
   });
 }
 

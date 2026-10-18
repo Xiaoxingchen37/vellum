@@ -30,6 +30,7 @@ type Props = {
   engineLabel: string;
   onOpenReader: (id: string) => void;
   onOpenSettings: () => void;
+  settingsRev?: number;
 };
 
 type SortKey = "opened" | "added" | "year" | "title";
@@ -37,7 +38,7 @@ type Filter = "all" | "starred" | "reading" | "unread" | "done";
 
 const SIDE_KEY = "vellum.side.open";
 
-export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings }: Props) {
+export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, settingsRev }: Props) {
   const [data, setData] = useState<LibraryResponse | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("opened");
@@ -67,13 +68,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings }: Props
     }
   }, [push]);
 
-  useEffect(() => {
-    void reload();
-    const timer = window.setInterval(() => void reload(), 4000);
-    return () => window.clearInterval(timer);
-  }, [reload]);
-
-  useEffect(() => {
+  const reloadModels = useCallback(() => {
     getChatModels()
       .then((r) => {
         setModels(r.models);
@@ -81,6 +76,17 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings }: Props
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    void reload();
+    const timer = window.setInterval(() => void reload(), 4000);
+    return () => window.clearInterval(timer);
+  }, [reload]);
+
+  useEffect(() => {
+    reloadModels();
+    void reload();
+  }, [reloadModels, reload, settingsRev]);
 
   const items = data?.items ?? [];
   const selectedPaper = items.find((i) => i.id === selected) ?? null;

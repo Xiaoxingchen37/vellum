@@ -16,6 +16,7 @@ function App() {
   const [status, setStatus] = useState<BackendStatus | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [engineLabel, setEngineLabel] = useState("");
+  const [settingsRev, setSettingsRev] = useState(0);
   const { push } = useToast();
 
   useTheme(prefs.theme);
@@ -39,6 +40,11 @@ function App() {
         setEngineLabel(c.engine_label || c.config.engine);
       })
       .catch(() => setEngineLabel(""));
+  };
+
+  const handleSaved = () => {
+    refreshEngine();
+    setSettingsRev((r) => r + 1);
   };
 
   useEffect(() => {
@@ -81,6 +87,7 @@ function App() {
           engineLabel={engineLabel}
           onOpenReader={openReader}
           onOpenSettings={() => setSettingsOpen(true)}
+          settingsRev={settingsRev}
         />
       ) : (
         <ReaderPage
@@ -92,7 +99,7 @@ function App() {
       {settingsOpen && (
         <SettingsDialog
           onClose={() => setSettingsOpen(false)}
-          onSaved={refreshEngine}
+          onSaved={handleSaved}
         />
       )}
       {status && !status.healthy ? (

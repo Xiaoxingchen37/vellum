@@ -112,15 +112,21 @@ def save(patch: dict) -> dict:
 def with_key(o: dict) -> dict:
     """页面提交的 openai 设置 → 要存的样子。每家服务商的 Key 分开存（keys[预设]），换来换去不用重填；
     页面发回来的打码 Key 或空 Key 表示不改。"""
-    cur = load()["openai"]
+    cur = load().get("openai") or {}
     o = dict(o)
     key = o.pop("api_key", None)
     preset = o.get("preset", cur.get("preset")) or ""
     keys = dict(cur.get("keys") or {})
     if cur.get("api_key") and not keys:  # 旧配置只有一个 Key
         keys[cur.get("preset") or ""] = cur["api_key"]
+
+    preset_changed = (preset != (cur.get("preset") or ""))
+    url_changed = (preset == "" and o.get("base_url", "").strip().rstrip("/") != (cur.get("base_url") or "").strip().rstrip("/"))
+
     if key and not key.startswith("••••"):
         keys[preset] = key.strip()
+    elif url_changed or (preset_changed and preset == "" and (not key or key.startswith("••••"))):
+        keys[""] = ""
     o["keys"] = keys
     o["api_key"] = keys.get(preset, "")
     return o

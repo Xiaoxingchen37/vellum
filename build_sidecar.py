@@ -35,7 +35,10 @@ def main() -> int:
     # PYTHONPATH: PyInstaller must be able to import `vellum` for
     # `--collect-data` to pull in the web assets (reader.html, CSS, JS). Without
     # this, the bundled sidecar starts but every page request 500s.
-    env = dict(os.environ, PYTHONPATH=str(PYTHON_DIR), PYTHONIOENCODING="utf-8")
+    lib_bin = Path(sys.executable).parent / "Library" / "bin"
+    current_path = os.environ.get("PATH", "")
+    new_path = f"{lib_bin};{current_path}" if lib_bin.is_dir() else current_path
+    env = dict(os.environ, PYTHONPATH=str(PYTHON_DIR), PYTHONIOENCODING="utf-8", PATH=new_path)
     # Sanity check: the data we rely on must be importable before we build.
     pkgs = subprocess.run(
         [sys.executable, "-c", "import vellum, pathlib; print(pathlib.Path(vellum.__file__).parent / 'web')"],
@@ -51,10 +54,14 @@ def main() -> int:
         "--distpath", str(DIST),
         "--workpath", str(ROOT / "build" / "pyi"),
         "--specpath", str(ROOT / "build"),
-        # Ship the web assets (reader/library HTML+JS+CSS) inside the exe.
+    ]
+    if lib_bin.is_dir():
+        args.extend(["--paths", str(lib_bin)])
+    # Ship the web assets (reader/library HTML+JS+CSS) inside the exe.
+    args.extend([
         "--collect-data", "vellum",
         str(ENTRY),
-    ]
+    ])
     print(" ".join(args), flush=True)
     code = subprocess.call(args, cwd=ROOT, env=env)
     if code != 0:

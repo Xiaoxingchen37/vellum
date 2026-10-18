@@ -39,6 +39,20 @@ def test_engine(body: dict) -> dict:
     cfg = config.load()
     if body.get("engine"):
         cfg["engine"] = body["engine"]
+    if isinstance(body.get("openai"), dict):
+        o = dict(body["openai"])
+        key = str(o.get("api_key") or "").strip()
+        preset = str(o.get("preset") or "")
+        cur_o = cfg.get("openai") or {}
+        if not key or key.startswith("••••"):
+            url_changed = (preset == "" and o.get("base_url", "").strip().rstrip("/") != cur_o.get("base_url", "").strip().rstrip())
+            if not url_changed:
+                stored_keys = cur_o.get("keys") or {}
+                key = stored_keys.get(preset) or (cur_o.get("api_key") if preset == cur_o.get("preset") else "")
+            else:
+                key = ""
+        o["api_key"] = key
+        cfg["openai"] = {**cur_o, **o}
     return engines.test(cfg)
 
 
