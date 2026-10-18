@@ -58,6 +58,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
   const [api, setApi] = useState("chat");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("");
+  const [reasoningEffort, setReasoningEffort] = useState("");
   const [vision, setVision] = useState(false);
   const [savedKeys, setSavedKeys] = useState<string[]>([]);
   const [fetched, setFetched] = useState<string[]>([]);
@@ -84,6 +85,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
         setApi(cfg.openai?.api ?? "chat");
         setApiKey(cfg.openai?.api_key ?? "");
         setModel(cfg.openai?.model ?? "");
+        setReasoningEffort(cfg.openai?.reasoning_effort ?? "");
         setVision(cfg.openai?.vision ?? false);
         setSavedKeys(cfg.openai?.saved_keys ?? []);
       })
@@ -125,6 +127,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
       const pick = p.model || first?.id || "";
       setModel(pick);
       setVision(!!p.models?.find((m) => m.id === pick)?.vision);
+      setReasoningEffort(p.reasoning_effort ?? "");
       setApiKey(hasKey(id) ? "••••" : "");
     } else {
       if (config?.openai?.preset === "") {
@@ -132,12 +135,14 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
         setApi(config?.openai?.api ?? "chat");
         setModel(config?.openai?.model ?? "");
         setVision(config?.openai?.vision ?? false);
+        setReasoningEffort(config?.openai?.reasoning_effort ?? "");
         setApiKey(config?.openai?.api_key ? "••••" : "");
       } else {
         setBaseUrl("");
         setApi("chat");
         setModel("");
         setVision(false);
+        setReasoningEffort("");
         setApiKey("");
       }
     }
@@ -185,6 +190,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
           api_key: apiKey,
           model: model.trim(),
           vision,
+          reasoning_effort: reasoningEffort,
         },
       });
       push("设置已保存", "ok");
@@ -208,6 +214,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
         api_key: apiKey,
         model: model.trim(),
         vision,
+        reasoning_effort: reasoningEffort,
       });
       setTestMsg({ text: r.message, ok: r.ok });
       push(r.message, r.ok ? "ok" : "err");
@@ -316,7 +323,7 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
                         onClick={() => pickPreset(p.id)}
                       >
                         {p.name}
-                        {p.free ? <i className="free-tag">免费</i> : null}
+                        {p.free && p.region === "local" ? <i className="free-tag">免费</i> : null}
                         {hasKey(p.id) ? <span className="ok-dot" title="已存 Key" /> : null}
                       </button>
                     ))}
@@ -344,39 +351,51 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
             </p>
           ) : null}
 
-          {!current ? (
-            <div className="grid2">
-              <label className="field">
+          <div className="grid2">
+            <label className="field">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span>接口地址（base URL）</span>
-                <input
-                  className="input"
-                  value={baseUrl}
-                  placeholder="https://…/v1"
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setBaseUrl(next);
-                    if (
-                      preset === "" &&
-                      apiKey.startsWith("••••") &&
-                      next.trim() !== (config?.openai?.base_url || "").trim()
-                    ) {
-                      setApiKey("");
-                    }
-                  }}
-                />
-              </label>
-              <label className="field">
-                <span>接口格式</span>
-                <select className="input" value={api} onChange={(e) => setApi(e.target.value)}>
-                  {API_KINDS.map(([v, label]) => (
-                    <option key={v} value={v}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
+                {current &&
+                baseUrl.trim().replace(/\/$/, "") !==
+                  (current.base_url || "").trim().replace(/\/$/, "") ? (
+                  <button
+                    type="button"
+                    className="btn sm line"
+                    style={{ padding: "0 6px", fontSize: 11, height: "auto" }}
+                    onClick={() => setBaseUrl(current.base_url)}
+                  >
+                    恢复默认地址
+                  </button>
+                ) : null}
+              </div>
+              <input
+                className="input"
+                value={baseUrl}
+                placeholder="https://…/v1"
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setBaseUrl(next);
+                  if (
+                    preset === "" &&
+                    apiKey.startsWith("••••") &&
+                    next.trim() !== (config?.openai?.base_url || "").trim()
+                  ) {
+                    setApiKey("");
+                  }
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>接口格式</span>
+              <select className="input" value={api} onChange={(e) => setApi(e.target.value)}>
+                {API_KINDS.map(([v, label]) => (
+                  <option key={v} value={v}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
           {current && !current.key ? null : (
             <label className="field">
@@ -446,17 +465,34 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
             <span>模型能看图（把 PDF 原页图一起发过去，公式和表格更准）</span>
           </label>
 
-          <label className="field">
-            <span>全文页数确认上限</span>
-            <input
-              className="input"
-              type="number"
-              min={0}
-              value={pageCap}
-              onChange={(e) => setPageCap(Number(e.target.value))}
-            />
-            <p className="hint">超过这个页数会先确认再翻译；填 0 表示不限制。</p>
-          </label>
+          <div className="grid2">
+            <label className="field">
+              <span>思考等级（推理强度）</span>
+              <select
+                className="input"
+                value={reasoningEffort}
+                onChange={(e) => setReasoningEffort(e.target.value)}
+              >
+                <option value="">跟随模型默认</option>
+                <option value="none">关闭思考（最快，适合纯翻译）</option>
+                <option value="low">低（少思考，推荐推理模型）</option>
+                <option value="medium">中（适度思考）</option>
+                <option value="high">高（深度思考）</option>
+              </select>
+              <p className="hint">对于带思考链的模型（如 Stepfun、DeepSeek-R1 等），调低或关闭思考可大幅缩短耗时。</p>
+            </label>
+            <label className="field">
+              <span>全文页数确认上限</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                value={pageCap}
+                onChange={(e) => setPageCap(Number(e.target.value))}
+              />
+              <p className="hint">超过这个页数会先确认再翻译；填 0 表示不限制。</p>
+            </label>
+          </div>
 
           <div className="grid2">
             <label className="field">
@@ -466,11 +502,11 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
                 value={batchPages}
                 onChange={(e) => setBatchPages(Number(e.target.value))}
               >
-                <option value={1}>1 页（最稳，模型输出不易截断）</option>
+                <option value={1}>1 页（推荐，单次输出少、返回最快）</option>
                 <option value={2}>2 页（默认）</option>
                 <option value={3}>3 页（快一些，长论文可能被截断）</option>
               </select>
-              <p className="hint">页数越多越快，但单次输出变长，超出模型上限会被截断。</p>
+              <p className="hint">1 页单次输出少、速度最快；页数越多单批越久，且可能被截断。</p>
             </label>
             <label className="field">
               <span>同时翻译几段</span>

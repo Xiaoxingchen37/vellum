@@ -119,7 +119,28 @@ def _taken(ws: Workspace, batch: list[int]) -> set[str]:
     return {b["id"] for b in ws.load("paper").get("blocks", []) if b.get("page") not in batch}
 
 
+def _local_repair_blocks(blocks: list[dict]) -> None:
+    """本地自动修复模型返回的轻微 TeX 控制字符和未闭合 $，避免触发昂贵的二次 LLM 调用。"""
+    ctrl_re = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+    for b in blocks:
+        if not isinstance(b, dict):
+            continue
+        for k in ("zh", "en", "caption_zh", "caption_en", "image_zh", "image_en", "tex"):
+            v = b.get(k)
+            if isinstance(v, str):
+                fixed = (v.replace("\x0crac", r"\frac")
+                          .replace("\x08ar", r"\bar")
+                          .replace("\x08eta", r"\beta")
+                          .replace("\x0calpha", r"\alpha")
+                          .replace("\x09ext", r"\text"))
+                fixed = ctrl_re.sub("", fixed)
+                if (fixed.count("$") - fixed.count(r"\$")) % 2 != 0:
+                    fixed += "$"
+                b[k] = fixed
+
+
 def _problems(data: dict) -> list[str]:
+    _local_repair_blocks(data.get("blocks") or [])
     problems, tex = block_problems(data["blocks"])
     return problems + tex_problems(tex)
 
@@ -142,6 +163,9 @@ def _fill_batch(ws: Workspace, cfg: dict, batch: list[int], cancel, say, meter=N
         raise engines.EngineError(tr("模型输出的格式不对（缺 zh）"))
     fake = [{"id": k, "type": "para", "zh": v} for k, v in data["zh"].items() if isinstance(v, str)]
     problems = _problems({"blocks": fake})
+    for b in fake:
+        if b["id"] in data["zh"]:
+            data["zh"][b["id"]] = b["zh"]
     if problems:
         say(tr("第 {page} 页起有 {n} 处公式或格式问题，正在让模型修正", page=batch[0], n=len(problems)))
         try:

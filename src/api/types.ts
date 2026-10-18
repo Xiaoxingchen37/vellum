@@ -214,6 +214,7 @@ export type ConfigResponse = {
       has_key?: boolean;
       api_key?: string;
       saved_keys?: string[];
+      reasoning_effort?: string;
     };
     page_cap: number;
     batch_pages: number;
@@ -253,6 +254,7 @@ export type Preset = {
   models?: PresetModel[];
   key_url?: string;
   note?: string;
+  reasoning_effort?: string;
 };
 
 export type ChatModelEntry = {
