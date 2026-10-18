@@ -9,7 +9,6 @@ import copy
 import os
 from pathlib import Path
 
-from ..chat.chat_models import DEFAULT_CHAT
 from ..engines.presets import PRESET_GROUPS, PRESETS  # noqa: F401
 from ..library.store import read_json, write_json_atomic
 
@@ -21,6 +20,8 @@ PROJECT = HOME  # 旧名，cli 里还在用
 CONFIG_PATH = HOME / "config.json"
 LOG_PATH = HOME / "vellum.log"
 SERVER_INFO = HOME / ".server.json"
+
+DEFAULT_CHAT = {"models": [], "default": ""}
 
 DEFAULTS = {
     "library_dir": str(HOME / "library"),

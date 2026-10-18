@@ -4,7 +4,7 @@
  * Translation is a direct API call to any OpenAI-compatible endpoint (Chat
  * Completions / Responses) or the Anthropic Messages API — no CLI required.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, Loader2 } from "lucide-react";
 import {
   getConfig,
@@ -257,9 +257,31 @@ export function SettingsDialog({ onClose, onSaved }: Props) {
   const showSelect = !typingModel && (recommendedIds.length > 0 || extraModels.length > 0);
   const dirChanged = !!location && newDir.trim() !== "" && newDir.trim() !== location.path;
 
+  const isBackdropMouseDown = useRef(false);
+
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    isBackdropMouseDown.current = e.target === e.currentTarget;
+  };
+
+  const handleBackdropMouseUp = (e: React.MouseEvent) => {
+    if (isBackdropMouseDown.current && e.target === e.currentTarget) {
+      onClose();
+    }
+    isBackdropMouseDown.current = false;
+  };
+
   return (
-    <div className="dialog-backdrop open" onClick={onClose}>
-      <div className="dialog" role="dialog" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="dialog-backdrop open"
+      onMouseDown={handleBackdropMouseDown}
+      onMouseUp={handleBackdropMouseUp}
+    >
+      <div
+        className="dialog"
+        role="dialog"
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="vellum-settings">
           <h2>设置</h2>
 

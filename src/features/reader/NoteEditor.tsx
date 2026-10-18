@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { Note } from "../../api/types";
 
@@ -16,6 +16,7 @@ export function NoteEditor({ note, onSave, onDelete, onClose }: Props) {
   const [body, setBody] = useState(note.body ?? "");
   const [kind, setKind] = useState<Note["kind"]>(note.kind ?? "note");
   const [color, setColor] = useState(note.color ?? "yellow");
+  const isBackdropMouseDown = useRef(false);
 
   const save = () => {
     const trimmed = body.trim();
@@ -27,9 +28,30 @@ export function NoteEditor({ note, onSave, onDelete, onClose }: Props) {
     onSave({ body: trimmed, kind, color });
   };
 
+  const handleBackdropMouseDown = (e: React.MouseEvent) => {
+    isBackdropMouseDown.current = e.target === e.currentTarget;
+  };
+
+  const handleBackdropMouseUp = (e: React.MouseEvent) => {
+    if (isBackdropMouseDown.current && e.target === e.currentTarget) {
+      onClose();
+    }
+    isBackdropMouseDown.current = false;
+  };
+
   return (
-    <div className="dialog-backdrop open" onClick={onClose}>
-      <div className="dialog" role="dialog" style={{ width: "min(520px, 92vw)" }} onClick={(e) => e.stopPropagation()}>
+    <div
+      className="dialog-backdrop open"
+      onMouseDown={handleBackdropMouseDown}
+      onMouseUp={handleBackdropMouseUp}
+    >
+      <div
+        className="dialog"
+        role="dialog"
+        style={{ width: "min(520px, 92vw)" }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2>{note.kind === "question" ? "问题" : note.kind === "highlight" ? "划线" : "笔记"}</h2>
         {note.quote && (
           <div className="card mine" style={{ position: "static", paddingLeft: 10, marginBottom: 12 }}>
