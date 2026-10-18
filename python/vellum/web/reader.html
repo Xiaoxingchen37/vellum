@@ -133,6 +133,13 @@
       parent.postMessage({ type: "vellum:back" }, "*");
     });
   }
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  window.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "vellum:theme" && (e.data.theme === "dark" || e.data.theme === "light")) {
+      document.documentElement.dataset.theme = e.data.theme;
+    }
+  });
 })();
 </script>
 </body>

@@ -16,7 +16,7 @@
 
   function tiles(s, a) {
     const tile = (p) => '<button data-af-preset="' + p.id + '" class="' + (a.preset === p.id ? "on" : "") + '">' + PR.esc(p.name) +
-      (p.free ? '<i class="free-tag">' + PR.t("免费") + "</i>" : "") + (hasKey(s, p.id) ? ' <span class="ok-dot" title="' + PR.t("已存 Key") + '"></span>' : "") + "</button>";
+      (p.free && p.region === "local" ? '<i class="free-tag">' + PR.t("免费") + "</i>" : "") + (hasKey(s, p.id) ? ' <span class="ok-dot" title="' + PR.t("已存 Key") + '"></span>' : "") + "</button>";
     return '<div class="preset-tiles grouped">' + s.groups.map(([g, label]) => {
       const ps = s.presets.filter((p) => p.region === g);
       return ps.length ? '<div class="preset-group"><span>' + PR.esc(label) + "</span>" + ps.map(tile).join("") + "</div>" : "";

@@ -15,7 +15,21 @@ from ..library.store import read_json, write_json_atomic
 PACKAGE = Path(__file__).resolve().parent.parent
 WEB = PACKAGE / "web"
 _SOURCE = PACKAGE.parent
-HOME = Path(os.environ.get("VELLUM_HOME") or (_SOURCE if (_SOURCE / "pyproject.toml").exists() else Path.home() / "Vellum"))
+
+
+def _default_home() -> Path:
+    if os.environ.get("VELLUM_HOME"):
+        return Path(os.environ["VELLUM_HOME"])
+    if (_SOURCE / "pyproject.toml").exists():
+        return _SOURCE
+    if os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        appdata = Path(os.environ["LOCALAPPDATA"]) / "Vellum"
+        if appdata.exists():
+            return appdata
+    return Path.home() / "Vellum"
+
+
+HOME = _default_home()
 PROJECT = HOME  # 旧名，cli 里还在用
 CONFIG_PATH = HOME / "config.json"
 LOG_PATH = HOME / "vellum.log"

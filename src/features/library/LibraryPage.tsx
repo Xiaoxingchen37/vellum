@@ -129,18 +129,24 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   const onPickFiles = async (files: FileList | null) => {
     if (!files || !files.length) return;
     setImporting(true);
+    let successCount = 0;
     try {
       for (const file of Array.from(files)) {
-        const result = await importPdf(file, file.name, {
-          translate: translateOnImport,
-          model: importModel,
-          token: data?.token || getSessionToken(),
-        });
-        push(result.new ? `已导入：${file.name}` : `已在库中：${file.name}`, "ok");
+        try {
+          const result = await importPdf(file, file.name, {
+            translate: translateOnImport,
+            model: importModel,
+            token: data?.token || getSessionToken(),
+          });
+          push(result.new ? `已导入：${file.name}` : `已在库中：${file.name}`, "ok");
+          successCount++;
+        } catch (fileErr) {
+          push(`${file.name} 导入失败：${fileErr instanceof Error ? fileErr.message : String(fileErr)}`, "err");
+        }
       }
-      await reload();
-    } catch (error) {
-      push(error instanceof Error ? error.message : "导入失败", "err");
+      if (successCount > 0) {
+        await reload();
+      }
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = "";

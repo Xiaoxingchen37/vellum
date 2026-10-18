@@ -11,7 +11,7 @@
  * to a `vellum:back` message, so the shell (not the iframe) returns to the
  * library. Everything else stays intact.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Loader2 } from "lucide-react";
 import { backendUrl } from "../../api/backend";
 import { useToast } from "../../components/Toast";
@@ -25,12 +25,14 @@ type Props = {
 export function ReaderPage({ projectId, onBack }: Props) {
   const [src, setSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const { push } = useToast();
 
   const resolve = useCallback(async () => {
     try {
       const base = await backendUrl();
-      setSrc(`${base}/read/${encodeURIComponent(projectId)}?embed=1`);
+      const theme = document.documentElement.dataset.theme || "light";
+      setSrc(`${base}/read/${encodeURIComponent(projectId)}?embed=1&theme=${theme}`);
       setError(null);
     } catch (e) {
       const message = e instanceof Error ? e.message : "无法连接阅读服务";
@@ -42,6 +44,22 @@ export function ReaderPage({ projectId, onBack }: Props) {
   useEffect(() => {
     void resolve();
   }, [resolve]);
+
+  // Sync theme changes to the embedded reader iframe
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const currentTheme = document.documentElement.dataset.theme || "light";
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: "vellum:theme", theme: currentTheme },
+        "*",
+      );
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   // The embedded reader asks the shell to go back when its back button is used.
   useEffect(() => {
@@ -67,7 +85,7 @@ export function ReaderPage({ projectId, onBack }: Props) {
         </div>
       ) : src ? (
         <>
-          <iframe className="reader-embed-frame" src={src} title="对照阅读" />
+          <iframe ref={iframeRef} className="reader-embed-frame" src={src} title="对照阅读" />
           <button className="reader-embed-open" onClick={openExternal} title="在浏览器中打开">
             <ExternalLink size={15} />
           </button>
