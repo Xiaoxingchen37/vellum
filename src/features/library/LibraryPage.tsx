@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  FileUp,
+  Check,
+  ChevronDown,
+  ChevronRight,
   Download,
+  Edit2,
+  FileUp,
+  FolderPlus,
   Loader2,
   PanelLeftClose,
+  Plus,
   Search,
   Settings,
   Star,
+  Tag,
   Trash2,
+  X,
 } from "lucide-react";
 import { importPdf } from "../../api/backend";
 import {
@@ -43,6 +51,19 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("opened");
   const [filter, setFilter] = useState<Filter>("all");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [allExpanded, setAllExpanded] = useState<boolean>(() => localStorage.getItem("vellum.all_papers.expanded") !== "0");
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("vellum.custom_categories") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [models, setModels] = useState<ChatModelEntry[]>([]);
@@ -57,6 +78,14 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   useEffect(() => {
     localStorage.setItem(SIDE_KEY, sideOpen ? "1" : "0");
   }, [sideOpen]);
+
+  useEffect(() => {
+    localStorage.setItem("vellum.all_papers.expanded", allExpanded ? "1" : "0");
+  }, [allExpanded]);
+
+  useEffect(() => {
+    localStorage.setItem("vellum.custom_categories", JSON.stringify(customCategories));
+  }, [customCategories]);
 
   const reload = useCallback(async () => {
     try {
@@ -91,6 +120,83 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   const items = data?.items ?? [];
   const selectedPaper = items.find((i) => i.id === selected) ?? null;
 
+  const allCategories = useMemo(() => {
+    const set = new Set<string>(customCategories);
+    for (const item of items) {
+      for (const t of item.tags ?? []) {
+        if (t && t.trim()) set.add(t.trim());
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "zh-CN"));
+  }, [items, customCategories]);
+
+  const categoryCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const cat of allCategories) c[cat] = 0;
+    for (const item of items) {
+      for (const t of item.tags ?? []) {
+        if (c[t] !== undefined) c[t]++;
+      }
+    }
+    return c;
+  }, [items, allCategories]);
+
+  const handleCreateCategory = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setIsCreatingCategory(false);
+      setNewCategoryName("");
+      return;
+    }
+    if (allCategories.includes(trimmed)) {
+      push(`分类 "${trimmed}" 已存在`, "info");
+      setSelectedCategory(trimmed);
+      setIsCreatingCategory(false);
+      setNewCategoryName("");
+      return;
+    }
+    setCustomCategories((prev) => [...prev, trimmed]);
+    setSelectedCategory(trimmed);
+    setIsCreatingCategory(false);
+    setNewCategoryName("");
+    push(`已创建分类 "${trimmed}"`, "ok");
+  };
+
+  const handleRenameCategory = async (oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) {
+      setEditingCategory(null);
+      return;
+    }
+    if (allCategories.includes(trimmed) && trimmed !== oldName) {
+      push(`已存在分类 "${trimmed}"`, "err");
+      return;
+    }
+    setCustomCategories((prev) => prev.map((c) => (c === oldName ? trimmed : c)));
+    const papersToUpdate = items.filter((i) => (i.tags ?? []).includes(oldName));
+    for (const p of papersToUpdate) {
+      const nextTags = (p.tags ?? []).map((t) => (t === oldName ? trimmed : t));
+      await patchItem(p.id, { tags: nextTags });
+    }
+    if (selectedCategory === oldName) setSelectedCategory(trimmed);
+    setEditingCategory(null);
+    await reload();
+    push(`已重命名分类为 "${trimmed}"`, "ok");
+  };
+
+  const handleDeleteCategory = async (catName: string) => {
+    if (!window.confirm(`确定删除分类 "${catName}" 吗？（仅解除分类关联，不会删除文献）`)) return;
+    setCustomCategories((prev) => prev.filter((c) => c !== catName));
+    const papersToUpdate = items.filter((i) => (i.tags ?? []).includes(catName));
+    for (const p of papersToUpdate) {
+      const nextTags = (p.tags ?? []).filter((t) => t !== catName);
+      await patchItem(p.id, { tags: nextTags });
+    }
+    if (selectedCategory === catName) setSelectedCategory(null);
+    await reload();
+    push(`已删除分类 "${catName}"`, "ok");
+  };
+
   const filtered = useMemo(() => {
     let list = items.slice();
     const q = query.trim().toLowerCase();
@@ -101,6 +207,9 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
           .toLowerCase()
           .includes(q),
       );
+    }
+    if (selectedCategory) {
+      list = list.filter((i) => (i.tags ?? []).includes(selectedCategory));
     }
     if (filter === "starred") list = list.filter((i) => i.starred);
     else if (filter === "reading") list = list.filter((i) => i.status === "reading");
@@ -113,7 +222,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
       return (b.last_opened || "").localeCompare(a.last_opened || "");
     });
     return list;
-  }, [items, query, filter, sort]);
+  }, [items, query, filter, selectedCategory, sort]);
 
   const counts = useMemo(() => {
     const c = { all: items.length, starred: 0, reading: 0, unread: 0, done: 0 };
@@ -235,16 +344,154 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
               <PanelLeftClose size={15} />
             </button>
           </h3>
+          <button
+            className={`side-tree-item ${filter === "all" && !selectedCategory ? "on" : ""}`}
+            onClick={() => {
+              setFilter("all");
+              setSelectedCategory(null);
+              setAllExpanded(true);
+            }}
+          >
+            <span
+              className="side-tree-toggle"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAllExpanded((prev) => !prev);
+              }}
+              title={allExpanded ? "收起分类" : "展开分类"}
+            >
+              {allExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </span>
+            <span className="t">全部论文</span>
+            <span className="n">{counts.all}</span>
+          </button>
+
+          {allExpanded && (
+            <div className="side-category-tree">
+              {allCategories.map((cat) => {
+                const isEditing = editingCategory === cat;
+                return (
+                  <div key={cat} className="cat-item-wrap">
+                    {isEditing ? (
+                      <div className="cat-inline-input">
+                        <input
+                          autoFocus
+                          value={editCategoryName}
+                          onChange={(e) => setEditCategoryName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void handleRenameCategory(cat, editCategoryName);
+                            if (e.key === "Escape") setEditingCategory(null);
+                          }}
+                        />
+                        <button onClick={() => void handleRenameCategory(cat, editCategoryName)} title="确认">
+                          <Check size={13} />
+                        </button>
+                        <button onClick={() => setEditingCategory(null)} title="取消">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          className={`cat-btn ${selectedCategory === cat ? "on" : ""}`}
+                          onClick={() => {
+                            setFilter("all");
+                            setSelectedCategory(cat);
+                          }}
+                          title={cat}
+                        >
+                          <Tag size={12} className="cat-icon" />
+                          <span className="cat-name">{cat}</span>
+                          <span className="n">{categoryCounts[cat] ?? 0}</span>
+                        </button>
+                        <div className="cat-actions">
+                          <button
+                            className="cat-action-btn"
+                            title="重命名"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingCategory(cat);
+                              setEditCategoryName(cat);
+                            }}
+                          >
+                            <Edit2 size={11} />
+                          </button>
+                          <button
+                            className="cat-action-btn danger"
+                            title="删除分类"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDeleteCategory(cat);
+                            }}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+
+              {isCreatingCategory ? (
+                <div className="cat-inline-input">
+                  <input
+                    autoFocus
+                    placeholder="新分类名称..."
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleCreateCategory(newCategoryName);
+                      if (e.key === "Escape") {
+                        setIsCreatingCategory(false);
+                        setNewCategoryName("");
+                      }
+                    }}
+                  />
+                  <button onClick={() => handleCreateCategory(newCategoryName)} title="创建">
+                    <Check size={13} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsCreatingCategory(false);
+                      setNewCategoryName("");
+                    }}
+                    title="取消"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="cat-add-btn"
+                  onClick={() => {
+                    setIsCreatingCategory(true);
+                    setNewCategoryName("");
+                  }}
+                >
+                  <Plus size={12} />
+                  <span>新建分类</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {(
             [
-              ["all", "全部论文", counts.all],
               ["starred", "星标", counts.starred],
               ["reading", "在读", counts.reading],
               ["unread", "未读", counts.unread],
               ["done", "已读", counts.done],
             ] as [Filter, string, number][]
           ).map(([id, label, n]) => (
-            <button key={id} className={filter === id ? "on" : ""} onClick={() => setFilter(id)}>
+            <button
+              key={id}
+              className={filter === id && !selectedCategory ? "on" : ""}
+              onClick={() => {
+                setFilter(id);
+                setSelectedCategory(null);
+              }}
+            >
               <span className="t">{label}</span>
               <span className="n">{n}</span>
             </button>
@@ -253,7 +500,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
 
         <main className="main">
           <div className="list-head">
-            <h1>{filter === "all" ? "全部论文" : "筛选"}</h1>
+            <h1>{selectedCategory ? `# ${selectedCategory}` : filter === "all" ? "全部论文" : "筛选"}</h1>
             <span className="count">{filtered.length} 篇</span>
             <span className="grow" />
             <label className="sort">
@@ -303,6 +550,8 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
               paper={selectedPaper}
               onOpen={() => onOpenReader(selectedPaper.id)}
               onChanged={reload}
+              allCategories={allCategories}
+              onAddCustomCategory={(c) => setCustomCategories((prev) => (prev.includes(c) ? prev : [...prev, c]))}
             />
           </aside>
         )}
@@ -364,6 +613,15 @@ function PaperRow({
           {paper.authors && <span>{paper.authors.split(",")[0]}</span>}
           {paper.venue && <span>{paper.venue}</span>}
           {paper.year && <span>{paper.year}</span>}
+          {paper.tags && paper.tags.length > 0 && (
+            <span className="row-tags">
+              {paper.tags.map((t) => (
+                <span key={t} className="mini-tag">
+                  #{t}
+                </span>
+              ))}
+            </span>
+          )}
           {paper.open_questions > 0 && <span className="chip">待回答 {paper.open_questions}</span>}
         </div>
       </div>
@@ -386,14 +644,110 @@ function PaperRow({
   );
 }
 
+function TagPicker({
+  assignedTags,
+  allCategories,
+  onToggleTag,
+  onCreateTag,
+}: {
+  assignedTags: string[];
+  allCategories: string[];
+  onToggleTag: (tag: string) => void;
+  onCreateTag: (tag: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (open) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const filtered = allCategories.filter((c) =>
+    c.toLowerCase().includes(search.trim().toLowerCase()),
+  );
+
+  return (
+    <div className="tag-picker-wrap" ref={wrapRef}>
+      <button
+        className="btn sm line"
+        onClick={() => setOpen((prev) => !prev)}
+        type="button"
+      >
+        <Plus size={13} /> 分类
+      </button>
+      {open && (
+        <div className="tag-picker-menu">
+          <input
+            autoFocus
+            className="tag-picker-input"
+            placeholder="搜索或输入新分类..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && search.trim()) {
+                e.preventDefault();
+                onCreateTag(search.trim());
+                setSearch("");
+              }
+            }}
+          />
+          {filtered.map((cat) => {
+            const assigned = assignedTags.includes(cat);
+            return (
+              <button
+                key={cat}
+                className={`tag-picker-item ${assigned ? "assigned" : ""}`}
+                onClick={() => onToggleTag(cat)}
+                type="button"
+              >
+                <span>#{cat}</span>
+                {assigned && <Check size={13} />}
+              </button>
+            );
+          })}
+          {search.trim() && !allCategories.includes(search.trim()) && (
+            <button
+              className="tag-picker-item"
+              onClick={() => {
+                onCreateTag(search.trim());
+                setSearch("");
+              }}
+              type="button"
+            >
+              <span>新建 "#{search.trim()}"</span>
+              <Plus size={13} />
+            </button>
+          )}
+          {filtered.length === 0 && !search.trim() && (
+            <div style={{ padding: "6px 8px", fontSize: 12, color: "var(--ink-3)" }}>
+              暂无分类，输入名称后回车新建
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaperDetail({
   paper,
   onOpen,
   onChanged,
+  allCategories,
+  onAddCustomCategory,
 }: {
   paper: PaperSummary;
   onOpen: () => void;
   onChanged: () => Promise<void>;
+  allCategories: string[];
+  onAddCustomCategory: (cat: string) => void;
 }) {
   const { push } = useToast();
   const [busy, setBusy] = useState(false);
@@ -527,6 +881,46 @@ function PaperDetail({
             <span>{paper.doi}</span>
           </>
         )}
+      </div>
+
+      <h4>分类</h4>
+      <div className="paper-tags-section">
+        <div className="tags-list">
+          {(paper.tags ?? []).map((tag) => (
+            <span key={tag} className="tag-chip">
+              <span className="hash">#</span>
+              <span>{tag}</span>
+              <button
+                className="tag-remove-btn"
+                title="移出此分类"
+                onClick={() => {
+                  const next = (paper.tags ?? []).filter((t) => t !== tag);
+                  void run(`已移出分类 "${tag}"`, () => patchItem(paper.id, { tags: next }));
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <TagPicker
+            assignedTags={paper.tags ?? []}
+            allCategories={allCategories}
+            onToggleTag={(tag) => {
+              const current = paper.tags ?? [];
+              const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];
+              void run(current.includes(tag) ? `已移出分类 "${tag}"` : `已加入分类 "${tag}"`, () =>
+                patchItem(paper.id, { tags: next }),
+              );
+            }}
+            onCreateTag={(tag) => {
+              onAddCustomCategory(tag);
+              const current = paper.tags ?? [];
+              if (!current.includes(tag)) {
+                void run(`已加入分类 "${tag}"`, () => patchItem(paper.id, { tags: [...current, tag] }));
+              }
+            }}
+          />
+        </div>
       </div>
 
       <h4>翻译进度</h4>
