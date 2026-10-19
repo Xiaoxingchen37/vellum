@@ -46,10 +46,15 @@ class Jobs:
 
     # ---------- 整篇 ----------
     def _write(self, ws: Workspace, **fields):
-        def apply(job):
-            job.update(fields)
-            job["updated"] = now_iso()
-        ws.update("job", apply)
+        if not ws or not ws.root.exists():
+            return
+        try:
+            def apply(job):
+                job.update(fields)
+                job["updated"] = now_iso()
+            ws.update("job", apply)
+        except OSError:
+            pass
 
     def enqueue(self, ws: Workspace, pages: list[int] | None = None, translate_after: bool = True, scope: str | None = None,
                 read: bool = False, model: str = "", confirmed: bool = False, target: str = "", cap_check: bool = False):

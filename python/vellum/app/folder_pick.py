@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -86,4 +87,7 @@ def pick(title: str, start: str = "") -> str | None:
         return None
     if r.returncode != 0:  # 编译或 COM 出错：当成弹不出来，让页面改成填路径
         return "" if sys.platform != "win32" else None
-    return r.stdout.decode("utf-8", "replace").strip().rstrip("/\\")
+    p = r.stdout.decode("utf-8", "replace").strip()
+    if re.match(r"^[a-zA-Z]:[\\/]?$", p):
+        return p[:2] + "\\"
+    return p.rstrip("/\\")

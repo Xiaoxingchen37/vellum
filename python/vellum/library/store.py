@@ -52,15 +52,17 @@ def dir_lock(folder: Path, name: str = ".write.lock", timeout: float = 15.0):
     """O_EXCL 建锁文件做跨进程互斥；超过 30 秒的旧锁视为残留。"""
     lock = Path(folder) / name
     start = time.time()
+    token = f"{os.getpid()}:{time.time_ns()}".encode()
     while True:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            os.write(fd, str(os.getpid()).encode())
+            os.write(fd, token)
             os.close(fd)
             break
         except FileExistsError:
             try:
-                if time.time() - lock.stat().st_mtime > 30:
+                st = lock.stat()
+                if time.time() - st.st_mtime > 30:
                     lock.unlink(missing_ok=True)
                     continue
             except FileNotFoundError:
@@ -72,7 +74,11 @@ def dir_lock(folder: Path, name: str = ".write.lock", timeout: float = 15.0):
     try:
         yield
     finally:
-        lock.unlink(missing_ok=True)
+        try:
+            if lock.is_file() and lock.read_bytes() == token:
+                lock.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def text_hash(s: str | None) -> str:
@@ -104,7 +110,19 @@ def empty_discussion() -> dict:
 # ---------- reader.json 的操作合并 ----------
 # 每个操作幂等、带时间戳；同一对象以较新的为准。页面断网时操作留在浏览器，恢复后重发不会重复或倒退。
 
+def _parse_iso(s: str | None) -> float | None:
+    if not s or not isinstance(s, str):
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
 def _newer(a: str | None, b: str | None) -> bool:
+    ta, tb = _parse_iso(a), _parse_iso(b)
+    if ta is not None and tb is not None:
+        return ta >= tb
     return (a or "") >= (b or "")
 
 
@@ -195,7 +213,7 @@ class Workspace:
                 self._journal(ops, client)
                 self._snapshot()
                 write_json_atomic(self.reader_path, reader)
-            return {"rev": reader.get("rev", 0), "applied": applied}
+            return {"rev": reader.get("rev", 0), "applied": applied, "reader": reader}
 
     def _journal(self, ops, client):
         self.journal_path.parent.mkdir(exist_ok=True)

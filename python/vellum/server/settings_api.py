@@ -45,7 +45,7 @@ def test_engine(body: dict) -> dict:
         preset = str(o.get("preset") or "")
         cur_o = cfg.get("openai") or {}
         if not key or key.startswith("••••"):
-            url_changed = (preset == "" and o.get("base_url", "").strip().rstrip("/") != cur_o.get("base_url", "").strip().rstrip())
+            url_changed = (preset == "" and o.get("base_url", "").strip().rstrip("/") != cur_o.get("base_url", "").strip().rstrip("/"))
             if not url_changed:
                 stored_keys = cur_o.get("keys") or {}
                 key = stored_keys.get(preset) or (cur_o.get("api_key") if preset == cur_o.get("preset") else "")

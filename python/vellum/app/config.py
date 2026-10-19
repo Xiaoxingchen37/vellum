@@ -45,7 +45,7 @@ DEFAULTS = {
     "auto_translate": True,      # 导入后自动开始翻译
     "target": "zh",              # 译文语言，见 langs.py
     "check_updates": False,      # 关闭：Vellum 是本地项目，不查询 easyread 的 Release
-    "batch_pages": 2,            # 每次交给模型的页数
+    "batch_pages": 1,            # 每次交给模型的页数（1 页最快、单次输出少、并发更充分）
     "page_cap": 60,              # 全文超过多少页先确认；0 表示不限
     "concurrency": 0,            # 同时译几段（分段并行，见 segments.py）；0 是自动，每段约 2 批、最多 4 段；手动最多 8 段
     "concurrency_v": 2,          # 1.3.1 起 concurrency 的意思变了，旧配置的 1 当成自动，见 load

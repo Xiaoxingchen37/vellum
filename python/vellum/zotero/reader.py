@@ -47,6 +47,10 @@ def _copy(data_dir: Path, tmp: Path) -> tuple[Path, bool]:
         dst = tmp / name
         try:
             shutil.copyfile(src, dst)
+            for ext in ("-wal", "-shm"):
+                side = data_dir / (name + ext)
+                if side.is_file():
+                    shutil.copyfile(side, tmp / (name + ext))
             con = sqlite3.connect(f"file:{dst.as_posix()}?mode=ro", uri=True)
             con.execute("SELECT count(*) FROM items").fetchone()
             con.close()
@@ -172,8 +176,10 @@ def _read(con: sqlite3.Connection, data_dir: Path, base: str, backup: bool) -> S
         att = (_pdf_path(data_dir, base, key, mode, path or ""), path or "")
         if parent is None:
             lone.append((iid, key, added, att))
-        elif parent not in pdfs:
-            pdfs[parent] = att
+        else:
+            cur = pdfs.get(parent)
+            if cur is None or (not (cur[0] and cur[0].is_file()) and (att[0] and att[0].is_file())):
+                pdfs[parent] = att
 
     def entry(iid: int, key: str, added: str, type_name: str, att) -> Entry:
         ppl = creators.get(iid, [])

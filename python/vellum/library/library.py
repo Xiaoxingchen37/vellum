@@ -12,7 +12,7 @@ from pathlib import Path
 from ..pdf import sources
 from ..app.i18n import tr
 from ..app.log import log
-from .store import SCHEMA, Workspace, empty_discussion, empty_reader, now_iso, read_json, write_json_atomic
+from .store import SCHEMA, Workspace, dir_lock, empty_discussion, empty_reader, now_iso, read_json, write_json_atomic
 
 
 
@@ -82,20 +82,28 @@ class Library:
         if (ws.root / "paper.json").exists():
             return ws, False
         ws.root.mkdir(parents=True, exist_ok=True)
-        (ws.root / "source.pdf").write_bytes(data)
-        base_meta = {"title_zh": "", "title_en": "", "authors": "", "source": filename, "source_sha256": digest, "pdf": "source.pdf"}
-        base_meta.update(meta or {})
-        if not base_meta.get("title_en"):
-            base_meta["title_en"] = _pdf_title(ws.root / "source.pdf") or Path(filename).stem
-        write_json_atomic(ws.paper_path, {
-            "schema": SCHEMA, "meta": base_meta,
-            "translation": {"scope": "未开始", "done_pages": [], "note": ""},  # i18n-ok 存进 paper.json
-            "glossary": [], "references": [], "blocks": [],
-        })
-        write_json_atomic(ws.discussion_path, empty_discussion())
-        write_json_atomic(ws.reader_path, empty_reader())
-        write_json_atomic(ws.item_path, {"added": now_iso(), "tags": [], "status": "unread", "starred": False})
-        return ws, True
+        with dir_lock(ws.root):
+            if (ws.root / "paper.json").exists():
+                return ws, False
+            source_pdf = ws.root / "source.pdf"
+            if not source_pdf.exists():
+                source_pdf.write_bytes(data)
+            base_meta = {"title_zh": "", "title_en": "", "authors": "", "source": filename, "source_sha256": digest, "pdf": "source.pdf"}
+            base_meta.update(meta or {})
+            if not base_meta.get("title_en"):
+                base_meta["title_en"] = _pdf_title(source_pdf) or Path(filename).stem
+            write_json_atomic(ws.paper_path, {
+                "schema": SCHEMA, "meta": base_meta,
+                "translation": {"scope": "未开始", "done_pages": [], "note": ""},  # i18n-ok 存进 paper.json
+                "glossary": [], "references": [], "blocks": [],
+            })
+            if not ws.discussion_path.exists():
+                write_json_atomic(ws.discussion_path, empty_discussion())
+            if not ws.reader_path.exists():
+                write_json_atomic(ws.reader_path, empty_reader())
+            if not ws.item_path.exists():
+                write_json_atomic(ws.item_path, {"added": now_iso(), "tags": [], "status": "unread", "starred": False})
+            return ws, True
 
     def fetch(self, ref: str) -> tuple[bytes, str, dict]:
         """链接、arXiv 编号、DOI、标题 → (PDF, 文件名, 元数据)。见 sources.py。"""

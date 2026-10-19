@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import re
 import sys
 import threading
 
@@ -48,6 +49,18 @@ class App:
         self.presence = None  # presence.Presence，serve() 里设
 
 
+_ALLOWED_ORIGIN_RE = re.compile(
+    r"^(tauri://localhost|https?://tauri\.localhost|https?://localhost(:\d+)?|https?://127\.0\.0\.1(:\d+)?)$",
+    re.I,
+)
+
+
+def _is_allowed_origin(origin: str | None) -> bool:
+    if not origin:
+        return False
+    return bool(_ALLOWED_ORIGIN_RE.match(origin.strip()))
+
+
 class Handler(BaseHTTPRequestHandler):
     app: App
     protocol_version = "HTTP/1.1"
@@ -57,18 +70,22 @@ class Handler(BaseHTTPRequestHandler):
             sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
     def end_headers(self):
-        # The desktop shell serves the React UI from a different origin
-        # (tauri://localhost) than this loopback server, so every request is
-        # cross-origin. We only ever bind to 127.0.0.1, so a permissive CORS
-        # policy is safe and is what lets the webview read our responses at all.
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Token")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")
+        # 仅允许桌面外壳（tauri://localhost 等）与本机开发回环地址跨域访问，防范恶意网页跨站读取 Token 并发起操作
+        origin = self.headers.get("Origin") if hasattr(self, "headers") and self.headers else None
+        if origin and _is_allowed_origin(origin):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Token")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")
+            self.send_header("Vary", "Origin")
         super().end_headers()
 
     def do_OPTIONS(self):
-        # CORS preflight: the browser sends this before any POST carrying
-        # X-Token or a JSON body. Answer 204 with the CORS headers above.
+        origin = self.headers.get("Origin") if hasattr(self, "headers") and self.headers else None
+        if origin and not _is_allowed_origin(origin):
+            self.send_response(403)
+            self.send_header("Content-Length", "0")
+            super().end_headers()
+            return
         self.send_response(204)
         self.send_header("Content-Length", "0")
         self.send_header("Cache-Control", "no-store")

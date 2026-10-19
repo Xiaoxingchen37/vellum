@@ -182,7 +182,11 @@ def move(src: str | Path, dst: str | Path, mode: str) -> dict:
     if mode == "copy" and state["papers"]:
         raise ValueError(tr("目标已有论文，请选择使用或合并文献库"))
     if mode in ("use", "merge") and not state["papers"]:
-        raise ValueError(tr("目标还没有论文，请选择复制文献库"))
+        src_state = inspect(src, exact=True)
+        if mode == "use" and not src_state.get("papers"):
+            pass
+        else:
+            raise ValueError(tr("目标还没有论文，请选择复制文献库"))
     result = {"ok": True, "path": str(dst), "old_path": str(src), "copied": 0, "skipped": [],
               "restart_required": True, "message": tr("文献库位置已更改，需要重启 Vellum 才能生效")}
     if mode == "use":

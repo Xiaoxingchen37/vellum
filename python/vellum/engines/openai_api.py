@@ -185,7 +185,14 @@ def _fetch(o: dict, body: dict, cancel) -> dict:
 def _chat_text(res) -> str:
     try:
         choice = res["choices"][0]
-        text = choice["message"]["content"] or ""
+        content = choice["message"]["content"] or ""
+        if isinstance(content, list):
+            text = "".join(
+                item.get("text", "") if isinstance(item, dict) else str(item)
+                for item in content
+            )
+        else:
+            text = str(content)
     except (KeyError, IndexError, TypeError):
         raise EngineError(tr("接口返回格式不对：{res}", res=str(res)[:300]))
     _check_finish(choice.get("finish_reason"))
@@ -371,25 +378,33 @@ def _responses_pieces(r, cancel, meter=None) -> Iterator[str]:
 def _messages_pieces(r, cancel, meter=None) -> Iterator[str]:
     """Anthropic Messages 的流：event: 行 + data: 行，正文在 content_block_delta 的 text_delta 里。"""
     done = False
+    usage_info = {}
     for ev in _events(r, cancel):
         if ev is None:
             return
         t = ev.get("type", "")
-        if t == "content_block_delta":
+        if t == "message_start":
+            usage_info.update(usage.from_anthropic(ev))
+        elif t == "content_block_delta":
             delta = ev.get("delta") or {}
             if delta.get("type") in ("text_delta", "text"):
                 yield delta.get("text") or ""
         elif t == "message_delta":
             if (ev.get("delta") or {}).get("stop_reason") == "max_tokens":
                 raise _truncated()
-            if meter is not None:
-                meter.add(**usage.from_anthropic({**ev, "message": ev.get("message")}))
+            delta_u = usage.from_anthropic(ev)
+            if delta_u.get("output"):
+                usage_info["output"] = delta_u["output"]
+            if delta_u.get("input") and not usage_info.get("input"):
+                usage_info["input"] = delta_u["input"]
         elif t == "message_stop":
             done = True
         elif t == "error":
             raise EngineError(tr("接口返回出错：{err}", err=(ev.get("error") or {}).get("message") or ev.get("error")))
     if not done:
         raise EngineError(tr("接口连接提前结束，回答未完成，请重试。"))
+    if meter is not None and usage_info:
+        meter.add(**usage_info)
 
 
 def _strip_think(pieces: Iterator[str]) -> Iterator[str]:

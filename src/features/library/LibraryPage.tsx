@@ -334,6 +334,8 @@ function PaperRow({
       artifactUrl(paper.id, "pages/page-001.webp").then((u) => {
         if (alive) setThumbUrl(u);
       });
+    } else {
+      setThumbUrl(null);
     }
     return () => {
       alive = false;
@@ -403,6 +405,8 @@ function PaperDetail({
       artifactUrl(paper.id, "pages/page-001.webp").then((u) => {
         if (alive) setCoverUrl(u);
       });
+    } else {
+      setCoverUrl(null);
     }
     return () => {
       alive = false;
@@ -424,9 +428,11 @@ function PaperDetail({
 
   const job = paper.job;
   const running = !!job && ["queued", "running"].includes(job.state ?? "");
+  const isConfirm = job?.state === "confirm";
   const total = paper.pages || 0;
   const done = paper.done_pages || 0;
-  const untranslated = Math.max(0, total - done);
+  const en = paper.en_pages || 0;
+  const untranslated = Math.max(0, total - done) + en;
 
   return (
     <div className="detail-inner">
@@ -446,6 +452,14 @@ function PaperDetail({
               onClick={() => run("已请求停止", () => cancelPaper(paper.id))}
             >
               停止翻译
+            </button>
+          ) : isConfirm ? (
+            <button
+              className="btn accent"
+              disabled={busy}
+              onClick={() => run("已确认并开始翻译", () => translatePaper(paper.id, { confirmed: true }))}
+            >
+              确认翻译全文（超 {job?.page_cap || 60} 页）
             </button>
           ) : untranslated > 0 ? (
             <button
