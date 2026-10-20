@@ -27,6 +27,25 @@ export function getLibrary(): Promise<LibraryResponse> {
   return api<LibraryResponse>("/api/library");
 }
 
+export function getPrefs(): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>("/api/prefs");
+}
+
+export function savePrefs(patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return api<Record<string, unknown>>("/api/prefs", {
+    method: "POST",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function patchLibraryTags(changes: { id: string; tags: string[] }[]): Promise<{ ok: boolean; updated: number }> {
+  return api<{ ok: boolean; updated: number }>("/api/library/patch-tags", {
+    method: "POST",
+    headers: { "X-Token": sessionToken },
+    body: JSON.stringify({ changes }),
+  });
+}
+
 export function getState(id: string): Promise<ReaderPayload> {
   return api<ReaderPayload>(`/api/p/${encodeURIComponent(id)}/state`);
 }

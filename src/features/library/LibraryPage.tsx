@@ -6,7 +6,6 @@ import {
   Download,
   Edit2,
   FileUp,
-  FolderPlus,
   Loader2,
   PanelLeftClose,
   Plus,
@@ -25,8 +24,11 @@ import {
   exportPaper,
   getChatModels,
   getLibrary,
+  getPrefs,
   getSessionToken,
   patchItem,
+  patchLibraryTags,
+  savePrefs,
   setSessionToken,
   translatePaper,
   type LibraryResponse,
@@ -45,6 +47,13 @@ type SortKey = "opened" | "added" | "year" | "title";
 type Filter = "all" | "starred" | "reading" | "unread" | "done";
 
 const SIDE_KEY = "vellum.side.open";
+const readStorage = (key: string): string | null => {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
 
 export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, settingsRev }: Props) {
   const [data, setData] = useState<LibraryResponse | null>(null);
@@ -52,10 +61,11 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   const [sort, setSort] = useState<SortKey>("opened");
   const [filter, setFilter] = useState<Filter>("all");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [allExpanded, setAllExpanded] = useState<boolean>(() => localStorage.getItem("vellum.all_papers.expanded") !== "0");
+  const [allExpanded, setAllExpanded] = useState<boolean>(() => readStorage("vellum.all_papers.expanded") !== "0");
   const [customCategories, setCustomCategories] = useState<string[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem("vellum.custom_categories") || "[]");
+      const value: unknown = JSON.parse(readStorage("vellum.custom_categories") || "[]");
+      return Array.isArray(value) && value.every((item) => typeof item === "string") ? value : [];
     } catch {
       return [];
     }
@@ -64,32 +74,76 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   const [newCategoryName, setNewCategoryName] = useState("");
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryName, setEditCategoryName] = useState("");
+  const [categoryBusy, setCategoryBusy] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [models, setModels] = useState<ChatModelEntry[]>([]);
   const [importModel, setImportModel] = useState("");
   const [translateOnImport, setTranslateOnImport] = useState(true);
   // Sidebar: pinned open, or collapsed to a thin rail that peeks on hover.
-  const [sideOpen, setSideOpen] = useState(() => localStorage.getItem(SIDE_KEY) !== "0");
+  const [sideOpen, setSideOpen] = useState(() => readStorage(SIDE_KEY) !== "0");
   const [sidePeek, setSidePeek] = useState(false);
   const { push } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+  const reloadSeq = useRef(0);
 
   useEffect(() => {
-    localStorage.setItem(SIDE_KEY, sideOpen ? "1" : "0");
+    try {
+      localStorage.setItem(SIDE_KEY, sideOpen ? "1" : "0");
+    } catch {
+      // Storage can be unavailable in restricted webviews.
+    }
   }, [sideOpen]);
 
   useEffect(() => {
-    localStorage.setItem("vellum.all_papers.expanded", allExpanded ? "1" : "0");
+    try {
+      localStorage.setItem("vellum.all_papers.expanded", allExpanded ? "1" : "0");
+    } catch {
+      // Storage can be unavailable in restricted webviews.
+    }
   }, [allExpanded]);
 
   useEffect(() => {
-    localStorage.setItem("vellum.custom_categories", JSON.stringify(customCategories));
+    try {
+      localStorage.setItem("vellum.custom_categories", JSON.stringify(customCategories));
+    } catch {
+      // Storage can be unavailable or full.
+    }
   }, [customCategories]);
 
+  useEffect(() => {
+    let alive = true;
+    getPrefs()
+      .then((prefs) => {
+        const library = prefs.library;
+        if (!alive || !library || typeof library !== "object") return;
+        const value = (library as Record<string, unknown>).custom_categories;
+        if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+          setCustomCategories(value as string[]);
+        }
+        const expanded = (library as Record<string, unknown>).all_expanded;
+        if (typeof expanded === "boolean") setAllExpanded(expanded);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setPrefsLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    void savePrefs({ library: { custom_categories: customCategories, all_expanded: allExpanded } }).catch(() => undefined);
+  }, [allExpanded, customCategories, prefsLoaded]);
+
   const reload = useCallback(async () => {
+    const requestSeq = ++reloadSeq.current;
     try {
       const next = await getLibrary();
+      if (requestSeq !== reloadSeq.current) return;
       setSessionToken(next.token);
       setData(next);
     } catch (error) {
@@ -163,6 +217,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
   };
 
   const handleRenameCategory = async (oldName: string, newName: string) => {
+    if (categoryBusy) return;
     const trimmed = newName.trim();
     if (!trimmed || trimmed === oldName) {
       setEditingCategory(null);
@@ -172,30 +227,57 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
       push(`已存在分类 "${trimmed}"`, "err");
       return;
     }
-    setCustomCategories((prev) => prev.map((c) => (c === oldName ? trimmed : c)));
-    const papersToUpdate = items.filter((i) => (i.tags ?? []).includes(oldName));
-    for (const p of papersToUpdate) {
-      const nextTags = (p.tags ?? []).map((t) => (t === oldName ? trimmed : t));
-      await patchItem(p.id, { tags: nextTags });
+    setCategoryBusy(true);
+    try {
+      const failed: string[] = [];
+      const papersToUpdate = items.filter((i) => (i.tags ?? []).includes(oldName));
+      try {
+        await patchLibraryTags(papersToUpdate.map((p) => ({ id: p.id, tags: (p.tags ?? []).map((t) => (t === oldName ? trimmed : t)) })));
+      } catch {
+        failed.push(...papersToUpdate.map((p) => p.id));
+      }
+      await reload();
+      if (failed.length) {
+        push(`重命名未完全完成：${failed.length} 篇文献保存失败`, "err");
+      } else {
+        setCustomCategories((prev) => prev.map((c) => (c === oldName ? trimmed : c)));
+        if (selectedCategory === oldName) setSelectedCategory(trimmed);
+        push(`已重命名分类为 "${trimmed}"`, "ok");
+      }
+    } finally {
+      setEditingCategory(null);
+      setCategoryBusy(false);
     }
-    if (selectedCategory === oldName) setSelectedCategory(trimmed);
-    setEditingCategory(null);
-    await reload();
-    push(`已重命名分类为 "${trimmed}"`, "ok");
   };
 
   const handleDeleteCategory = async (catName: string) => {
+    if (categoryBusy) return;
     if (!window.confirm(`确定删除分类 "${catName}" 吗？（仅解除分类关联，不会删除文献）`)) return;
-    setCustomCategories((prev) => prev.filter((c) => c !== catName));
-    const papersToUpdate = items.filter((i) => (i.tags ?? []).includes(catName));
-    for (const p of papersToUpdate) {
-      const nextTags = (p.tags ?? []).filter((t) => t !== catName);
-      await patchItem(p.id, { tags: nextTags });
+    setCategoryBusy(true);
+    try {
+      const failed: string[] = [];
+      const papersToUpdate = items.filter((i) => (i.tags ?? []).includes(catName));
+      try {
+        await patchLibraryTags(papersToUpdate.map((p) => ({ id: p.id, tags: (p.tags ?? []).filter((t) => t !== catName) })));
+      } catch {
+        failed.push(...papersToUpdate.map((p) => p.id));
+      }
+      await reload();
+      if (failed.length) {
+        push(`删除未完全完成：${failed.length} 篇文献保存失败`, "err");
+      } else {
+        setCustomCategories((prev) => prev.filter((c) => c !== catName));
+        if (selectedCategory === catName) setSelectedCategory(null);
+        push(`已删除分类 "${catName}"`, "ok");
+      }
+    } finally {
+      setCategoryBusy(false);
     }
-    if (selectedCategory === catName) setSelectedCategory(null);
-    await reload();
-    push(`已删除分类 "${catName}"`, "ok");
   };
+
+  useEffect(() => {
+    if (selectedCategory && !allCategories.includes(selectedCategory)) setSelectedCategory(null);
+  }, [allCategories, selectedCategory]);
 
   const filtered = useMemo(() => {
     let list = items.slice();
@@ -349,7 +431,6 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
             onClick={() => {
               setFilter("all");
               setSelectedCategory(null);
-              setAllExpanded(true);
             }}
           >
             <span
@@ -383,10 +464,10 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
                             if (e.key === "Escape") setEditingCategory(null);
                           }}
                         />
-                        <button onClick={() => void handleRenameCategory(cat, editCategoryName)} title="确认">
+                        <button disabled={categoryBusy} onClick={() => void handleRenameCategory(cat, editCategoryName)} title="确认">
                           <Check size={13} />
                         </button>
-                        <button onClick={() => setEditingCategory(null)} title="取消">
+                        <button disabled={categoryBusy} onClick={() => setEditingCategory(null)} title="取消">
                           <X size={13} />
                         </button>
                       </div>
@@ -394,6 +475,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
                       <>
                         <button
                           className={`cat-btn ${selectedCategory === cat ? "on" : ""}`}
+                          disabled={categoryBusy}
                           onClick={() => {
                             setFilter("all");
                             setSelectedCategory(cat);
@@ -407,6 +489,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
                         <div className="cat-actions">
                           <button
                             className="cat-action-btn"
+                            disabled={categoryBusy}
                             title="重命名"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -418,6 +501,7 @@ export function LibraryPage({ engineLabel, onOpenReader, onOpenSettings, setting
                           </button>
                           <button
                             className="cat-action-btn danger"
+                            disabled={categoryBusy}
                             title="删除分类"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -649,11 +733,13 @@ function TagPicker({
   allCategories,
   onToggleTag,
   onCreateTag,
+  disabled = false,
 }: {
   assignedTags: string[];
   allCategories: string[];
   onToggleTag: (tag: string) => void;
   onCreateTag: (tag: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -677,6 +763,7 @@ function TagPicker({
     <div className="tag-picker-wrap" ref={wrapRef}>
       <button
         className="btn sm line"
+        disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         type="button"
       >
@@ -704,6 +791,7 @@ function TagPicker({
               <button
                 key={cat}
                 className={`tag-picker-item ${assigned ? "assigned" : ""}`}
+                disabled={disabled}
                 onClick={() => onToggleTag(cat)}
                 type="button"
               >
@@ -715,6 +803,7 @@ function TagPicker({
           {search.trim() && !allCategories.includes(search.trim()) && (
             <button
               className="tag-picker-item"
+              disabled={disabled}
               onClick={() => {
                 onCreateTag(search.trim());
                 setSearch("");
@@ -892,6 +981,7 @@ function PaperDetail({
               <span>{tag}</span>
               <button
                 className="tag-remove-btn"
+                disabled={busy}
                 title="移出此分类"
                 onClick={() => {
                   const next = (paper.tags ?? []).filter((t) => t !== tag);
@@ -905,6 +995,7 @@ function PaperDetail({
           <TagPicker
             assignedTags={paper.tags ?? []}
             allCategories={allCategories}
+            disabled={busy}
             onToggleTag={(tag) => {
               const current = paper.tags ?? [];
               const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];

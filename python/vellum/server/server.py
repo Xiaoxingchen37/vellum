@@ -408,9 +408,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path.startswith("/api/p/"):
             parts = path.split("/")
-            ws = lib.ws(parts[3]) if len(parts) > 4 else None
+            ws = lib.ws(parts[3]) if len(parts) > 4 and len(parts) >= 5 else None
             if not ws:
                 return self._json(404, {"error": tr("没有这篇论文")})
+            if len(parts) < 5 or not parts[4]:
+                return self._json(404, {"error": "not found"})
             body = json.loads(self._body() or b"{}")
             if parts[4] == "chat" and len(parts) == 5:
                 return self._chat(ws, body)

@@ -1,6 +1,6 @@
 [package]
 name = "vellum"
-version = "0.2.0"
+version = "0.2.2"
 description = "Local-first literature translation reader"
 authors = ["You"]
 edition = "2021"

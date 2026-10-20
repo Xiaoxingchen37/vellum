@@ -140,6 +140,8 @@ def get(app, path: str):
 
 
 def post(app, path: str, body: dict):
+    if path == "/api/library/patch-tags":
+        return app.lib.patch_tags(body.get("changes", []))
     if path == "/api/library/inspect":
         return inspect(body)
     if path == "/api/library/pick-folder":  # 浏览器版：后端弹系统的选文件夹窗口
@@ -159,4 +161,4 @@ def post(app, path: str, body: dict):
     return None
 
 
-POST = {"/api/library/inspect", "/api/library/pick-folder", "/api/library/cleanup", "/api/library/move", "/api/library/reveal", "/api/shutdown"}
+POST = {"/api/library/inspect", "/api/library/pick-folder", "/api/library/cleanup", "/api/library/move", "/api/library/reveal", "/api/library/patch-tags", "/api/shutdown"}

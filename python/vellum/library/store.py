@@ -242,6 +242,13 @@ class Workspace:
 
     def patch_item(self, fields: dict) -> dict:
         allowed = {"tags", "status", "starred", "rating", "last_opened", "meta_override", "archived"}
+        if not isinstance(fields, dict):
+            raise ValueError("item 字段必须是对象")
+        if "tags" in fields and (
+            not isinstance(fields["tags"], list)
+            or any(not isinstance(tag, str) for tag in fields["tags"])
+        ):
+            raise ValueError("tags 必须是字符串数组")
 
         def apply(item):
             for k, v in fields.items():

@@ -116,7 +116,10 @@ class Migration:
                 cats += [c for c in want if c not in cats]
 
                 def apply(item, want=want, fresh=fresh):
-                    item["tags"] = list(dict.fromkeys((item.get("tags") or []) + want))
+                    existing = item.get("tags") or []
+                    if not isinstance(existing, list) or any(not isinstance(tag, str) for tag in existing):
+                        existing = []
+                    item["tags"] = list(dict.fromkeys(existing + want))
                     if fresh and e.added:
                         item["added"] = e.added
                     return item

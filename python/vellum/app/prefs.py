@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from . import config
-from ..library.store import read_json, write_json_atomic
+from ..library.store import dir_lock, read_json, write_json_atomic
 
 ALLOWED = {"reader", "keys", "ui", "library", "import"}  # ui：功能开关 features、快捷键总开关 keys_on
 
@@ -20,9 +20,12 @@ def load() -> dict:
 
 
 def save(patch: dict) -> dict:
-    data = load()
-    for k, v in (patch or {}).items():
-        if k in ALLOWED and isinstance(v, dict):
-            data[k] = {**(data.get(k) or {}), **v}
-    write_json_atomic(path(), data)
-    return data
+    prefs_path = path()
+    prefs_path.parent.mkdir(parents=True, exist_ok=True)
+    with dir_lock(prefs_path.parent, name=".prefs.write.lock"):
+        data = load()
+        for k, v in (patch or {}).items():
+            if k in ALLOWED and isinstance(v, dict):
+                data[k] = {**(data.get(k) or {}), **v}
+        write_json_atomic(prefs_path, data)
+        return data
