@@ -35,31 +35,39 @@ class Library:
         return [Workspace(p) for p in sorted(self.root.iterdir()) if p.is_dir() and not p.name.startswith(".") and (p / "paper.json").exists()]
 
     def patch_tags(self, changes: list[dict]) -> dict:
-        """Atomically apply a category rename/delete across paper item files."""
+        """Apply a category rename/delete under one library-wide write lock."""
         if not isinstance(changes, list) or any(not isinstance(c, dict) for c in changes):
             raise ValueError("批量分类更新必须是对象数组")
-        normalized = []
-        for change in changes:
-            pid, tags = change.get("id"), change.get("tags")
-            ws = self.ws(pid)
-            if not ws or not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
-                raise ValueError("批量分类更新包含无效论文或标签")
-            normalized.append((ws, tags))
-        originals = [(ws, ws.load("item") or {}) for ws, _ in normalized]
-        applied = []
-        try:
-            for ws, tags in normalized:
-                ws.patch_item({"tags": tags})
-                applied.append(ws)
-        except Exception:
-            for ws, item in originals:
-                if ws in applied:
-                    try:
-                        ws.update("item", lambda current, item=item: (current.clear(), current.update(item))[1])
-                    except Exception:
-                        pass
-            raise
-        return {"ok": True, "updated": len(normalized)}
+        # The root lock makes this operation mutually exclusive with other
+        # batch updates and gives readers a stable update window.
+        with dir_lock(self.root, name=".library.write.lock"):
+            normalized = []
+            seen = set()
+            for change in changes:
+                pid, tags = change.get("id"), change.get("tags")
+                ws = self.ws(pid)
+                if (not ws or pid in seen or not isinstance(tags, list)
+                        or any(not isinstance(tag, str) for tag in tags)):
+                    raise ValueError("批量分类更新包含无效论文或标签")
+                seen.add(pid)
+                normalized.append((ws, tags))
+            originals = [(ws, ws.load("item") or {}) for ws, _ in normalized]
+            attempted = []
+            try:
+                for ws, tags in normalized:
+                    attempted.append(ws)
+                    ws.patch_item({"tags": tags})
+            except Exception:
+                # Restore every item that may have been touched, including
+                # the item whose write raised after replacing its file.
+                for ws, item in originals:
+                    if ws in attempted:
+                        try:
+                            ws.update("item", lambda current, item=item: (current.clear(), current.update(item))[1])
+                        except Exception:
+                            pass
+                raise
+            return {"ok": True, "updated": len(normalized)}
 
     # ---------- 列表摘要 ----------
     def summary(self, ws: Workspace) -> dict:
